@@ -15,7 +15,8 @@ def gaia_from_image(hdu):
 
     ra = hdr['CRVAL1']*u.degree
     dec = hdr['CRVAL2'] * u.degree
-    radius = abs(hdr['CDELT1']*hdr['CRPIX1']) * u.degree
+    diag = np.sqrt( (hdr['CDELT1']*hdr['CRPIX1'])**2 + (hdr['CDELT2']*hdr['CRPIX2'])**2 )
+    radius = 1.1*diag * u.degree # a little fudge factor
 
     gstars.conesearch(ra, dec, radius)
 
@@ -46,16 +47,16 @@ def false_image(hdu, coords, flux, sigma=20.0,  noise_dc= 1000):
     s = hdu.data.shape
     wcs = WCS(hdu.header)
  
-    img = np.zeros(s, dtype=float)
 
+    in_image = wcs.footprint_contains(coords)
     pxs = wcs.world_to_pixel(coords)
-    for p_x, p_y, f in zip(pxs[0], pxs[1], flx):
-        if p_x < 0 or p_y < 0:
-            continue
-        if p_x > s[1] or p_y > s[0]:
-            continue
-        img[int(p_y),int(p_x)] = f*10000
 
+    p_x = pxs[0][in_image].astype(int)
+    p_y = pxs[1][in_image].astype(int)
+    flx = flux[in_image]
+    
+    img = np.zeros(s, dtype=np.float32)
+    img[p_y, p_x] = flx*10000
     img = gaussian_filter(img, sigma=sigma, mode='nearest')
 
     # Let's add some noise to the images

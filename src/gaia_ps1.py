@@ -1,5 +1,7 @@
 import tempfile, os
 from astroquery.gaia import Gaia
+from astropy.table import Table, join
+from PanSTARRS import PanSTARRS1 as ps1
 
 def source_id_to_xmlfile(source_idlist, sidcol='typed_id', table_id='source_idlist'):
 	#need tempfile for source id list
@@ -44,6 +46,33 @@ def gaiadr3toPanStarrs1(source_idlist,nearest=True):
 	# return ret_df
 	tbl.add_index('typed_id')
 	return tbl
+
+def gaia_xmatch_panstars(gstars):
+	gaia_tbl = Table.from_pandas(gstars.objs.reset_index())
+	# get the cross match table from Gaia
+	xmatch_tbl = gaiadr3toPanStarrs1(gstars.source_idlist())
+	n_src = len(xmatch_tbl)
+	n_match = n_src - xmatch_tbl['original_ext_source_id'].mask.sum()
+	print(f'Number of source ids: {n_src}, matches found: {n_match}')
+
+	# rename to objID ala Panstarrs (needed for subsequent join)
+	xmatch_tbl.rename_column('original_ext_source_id', 'objID')
+
+	#ditch the rows with no  matches
+	xmatch_tbl = xmatch_tbl[~xmatch_tbl['objID'].mask]
+
+	#Fetch the panstars xmatches
+	pstars = ps1(name='from Gaia xmatch')
+	pstars.from_obj_idlist(xmatch_tbl['objID'] )
+
+	# put the gaia source_id on the panstars table
+	pstars.objs = join(pstars.objs, xmatch_tbl[['source_id','objID']], keys='objID')
+
+	# join gaia and pstars object tables
+	gaia_ps1 = join(gaia_tbl, pstars.objs, keys='source_id')
+
+	#all done
+	return gaia_ps1
 
 if __name__ == '__main__':
 	idlist = [63449521800719488,
