@@ -1,4 +1,5 @@
 from astropy.time import Time
+from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astropy.wcs import WCS, FITSFixedWarning
 import numpy as np
@@ -11,14 +12,22 @@ sys.path.append(os.path.expanduser('~/repos/runawaysearch/src'))
 from gaiastars import gaiastars as gs
 def gaia_from_image(hdu):
     hdr = dict(hdu.header)
+    wcs = WCS(hdu.header)
+
     gstars = gs(name = hdr['OBJECT'], description =hdr['S_UFNAME'])
 
-    ra = hdr['CRVAL1']*u.degree
-    dec = hdr['CRVAL2'] * u.degree
-    diag = np.sqrt( (hdr['CDELT1']*hdr['CRPIX1'])**2 + (hdr['CDELT2']*hdr['CRPIX2'])**2 )
-    radius = 1.1*diag * u.degree # a little fudge factor
+    # get approx middle of image:
+    ra_pix = hdr['NAXIS1']//2 - 1 #python indexing
+    dec_pix = hdr['NAXIS2']//2 - 1
+    mid_coord = wcs.pixel_to_world(ra_pix, dec_pix)
 
-    gstars.conesearch(ra, dec, radius)
+    # get the separation from the mid point to one of the corners
+    footprint = wcs.calc_footprint()
+    corner_coord = SkyCoord(ra=footprint[0][0]*u.degree, dec=footprint[0][1]*u.degree,
+                            frame= mid_coord.frame)
+    radius = mid_coord.separation(corner_coord).to(u.degree)
+
+    gstars.conesearch(mid_coord.ra, mid_coord.dec, radius)
 
     return gstars
 
@@ -38,29 +47,48 @@ import matplotlib.colors as colors
 
 np.random.seed(1234)
 
+from astropy.modeling import models
 
-def false_image(hdu, coords, flux, sigma=20.0,  noise_dc= 1000):
-    #fix the flux:
-    flx = np.nan_to_num(flux, nan=np.nanmean(flux))
-    flx = np.clip(flx, a_min=0, a_max=10000)
+def false_image(hdr, coords, flux, scale=10.0):
+    """
+    flux: astropy table column (masked array), isomorphic to coords
+    """
+    # image shape
+    s = (hdr['NAXIS2'], hdr['NAXIS1'])
+    gain = hdr['GAIN'] #adu per electron
 
-    s = hdu.data.shape
-    wcs = WCS(hdu.header)
+    # convert the seeing to FWHM in decimal degrees, then to pixels:
+    seeing = hdr['SEEING']/3600.0 #seeing is in arcsec
+
+    pc1_1 = hdr.get('PC1_1', 1.0)
+    see_pix = seeing/(np.abs(hdr['CDELT1']*pc1_1)) #FWHM in pixels
+    stddev = see_pix * 2.35482/scale # see http://hyperphysics.phy-astr.gsu.edu/hbase/Math/gaufcn2.html
+
+    wcs = WCS(hdr)
  
+    #just deal with the xmatches that are in the image and have a flux value
+    in_image = np.logical_and(wcs.footprint_contains(coords), ~flux.mask)
 
-    in_image = wcs.footprint_contains(coords)
-    pxs = wcs.world_to_pixel(coords)
+    pxs = wcs.world_to_array_index(coords[in_image])
 
-    p_x = pxs[0][in_image].astype(int)
-    p_y = pxs[1][in_image].astype(int)
-    flx = flux[in_image]
-    
     img = np.zeros(s, dtype=np.float32)
-    img[p_y, p_x] = flx*10000
-    img = gaussian_filter(img, sigma=sigma, mode='nearest')
 
-    # Let's add some noise to the images
-    noise_std = np.sqrt(noise_dc)
-    img += np.random.normal(loc=noise_dc, scale=noise_std, size=img.shape)
-
+    for i,f in enumerate(flux[in_image]):
+        mod = models.Gaussian2D(amplitude=f/gain, x_mean=pxs[1][i], y_mean=pxs[0][i], x_stddev=stddev, y_stddev=stddev)
+        mod.render(img)
+    
     return img
+
+def obs_dirs(data_dir, obj_name):
+    obs_root = os.path.join(data_dir, obj_name)
+    obsdirs = {'obs_root': obs_root,
+               'raw_image':os.path.join(obs_root, 'raw_image'),
+                'raw_bias': os.path.join(obs_root, 'raw_bias'),
+                'combined_bias': os.path.join(obs_root, 'combined_bias'),
+                'xmatch_tables': os.path.join(obs_root, 'xmatch_tables'),
+                'false_image':os.path.join(obs_root, 'false_image'),
+                'registered_image': os.path.join(obs_root, 'registered_image'),
+                'no_bias': os.path.join(obs_root, 'no_bias'),
+                'calibration_info': os.path.join(obs_root,'calibration_info')}
+    return obsdirs
+    

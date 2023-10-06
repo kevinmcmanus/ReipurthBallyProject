@@ -7,5 +7,13 @@
 			"path": "../runawaysearch/src"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"terminal.integrated.defaultProfile.windows": "Windows PowerShell",
+		"terminal.integrated.env.windows": {
+			"env": {
+				"CASJOBS_USERID": "kevinmcmanus",
+				"CASJOBS_PW":"THRo*zvPqL7mWCv8"
+			}
+		}
+	}
 }

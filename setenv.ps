@@ -1,0 +1,6 @@
+get-content .env | foreach {
+    $name, $value = $_.split('=')
+    set-content env:\$name $value
+}
+
+python src/showimage.py jkjkjd.fits
