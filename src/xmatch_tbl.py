@@ -77,11 +77,10 @@ if __name__ == "__main__":
     'phot_rp_mean_mag']+['phot_g_mean_flux', 'phot_bp_mean_flux', 'phot_rp_mean_flux']
     #note: ruwe removed to make query work both dr2 and dr3
     gs.gaia_column_dict_gaiadr3['gaiadr3.gaia_source']['tblcols'] = flux_cols
-    gs.gaia_column_dict_gaiadr2['gaiadr2.gaia_source']['tblcols'] = flux_cols
 
 
-    scr2 = os.environ.get('CASJOBS_USERID')
-    assert scr2 is not None
+    # scr2 = os.environ.get('CASJOBS_USERID')
+    # assert scr2 is not None
   
     """
     One x-match table per detector.
@@ -111,7 +110,7 @@ if __name__ == "__main__":
         print(f'detector: {d}, ra: {ra}, dec: {dec}, radius: {rad}')
 
         gaia_records = gs(name=d)
-        gaia_records.conesearch(ra=ra, dec=dec, radius=rad, schema='gaiadr2')
+        gaia_records.conesearch(ra=ra, dec=dec, radius=rad, schema='gaiadr3')
         print(f'Gaia returned {len(gaia_records)} records')
 
         #xmatch_tbl = gaia_xmatch_panstars(gaia_records)

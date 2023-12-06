@@ -4,8 +4,17 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
-
+        {
+            "name": "Python: False Image",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args":["M8",
+                    "--rootdir", "~/Documents/M8data"
+            ]
+        },
         {
             "name": "Python: Current File",
             "type": "python",
@@ -21,9 +30,11 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["M8"],
+            "args": [
+                "M8"
+            ],
             // ENVINRONMENT VARIABLES
-            "env": {                 
+            "env": {
                 "CASJOBS_USERID": "kevinmcmanus",
                 "CASJOBS_PW": "THRo*zvPqL7mWCv8",
                 //"PATH":"${env:PATH};C:\\Users\\Kevin\repos\\ReipurthBallyProject\\src;"

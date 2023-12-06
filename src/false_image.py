@@ -118,8 +118,7 @@ if __name__ == "__main__":
                         obstime = t_gaia)
 
         #move the positions to the obs time and reframe to FK5
-        t_2000 = Time('J2000.0',  format='jyear_str')
-        coords = coords_gaia.apply_space_motion(new_obstime=t_2000).fk5
+        coords = coords_gaia.apply_space_motion(new_obstime=t_obs).fk5
 
         phdu = false_image(hdr, coords, xmatch_tbl['phot_g_mean_flux'], scale=scale)
 

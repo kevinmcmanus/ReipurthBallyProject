@@ -103,6 +103,8 @@ def show_image(image,
 
     if not show_ticks:
         ax.tick_params(labelbottom=False, labelleft=False, labelright=False, labeltop=False)
+    
+    return im
 
 
 def image_snippet(image, center, width=50, axis=None, fig=None,
