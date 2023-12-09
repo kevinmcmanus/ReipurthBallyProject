@@ -87,9 +87,10 @@ class subaru_reduction():
         #swap the headers
         with fits.open(tmp_fits) as t:
             t_data = np.where(t[0].data > 0, t[0].data, np.nan)
-        with fits.open(false_in) as f:
-            f_hdr = f[0].header
-
+        # with fits.open(false_in) as f:
+        #     f_hdr = f[0].header
+        f_hdr = hdr
+        f_hdr.pop('BLANK', None)
         f_hdr['IGNRVAL'] = -32768
         f_hdr['DETECTOR'] = detector
         phdu = fits.PrimaryHDU(data = t_data, header=f_hdr)
@@ -101,5 +102,18 @@ class subaru_reduction():
 
         return res
 
-
+def obs_dirs(data_dir, obj_name):
+    obs_root = os.path.join(data_dir, obj_name)
+    obsdirs = {'obs_root': obs_root,
+               'raw_image':os.path.join(obs_root, 'raw_image'),
+                'raw_bias': os.path.join(obs_root, 'raw_bias'),
+                'combined_bias': os.path.join(obs_root, 'combined_bias'),
+                'xmatch_tables': os.path.join(obs_root, 'xmatch_tables'),
+                'false_image':os.path.join(obs_root, 'false_image'),
+                'registered_image': os.path.join(obs_root, 'registered_image'),
+                'no_bias': os.path.join(obs_root, 'no_bias'),
+                'distcorr': os.path.join(obs_root, 'distcorr'),
+                'coord_maps': os.path.join(obs_root, 'coord_maps'),
+                'calibration_info': os.path.join(obs_root,'calibration_info')}
+    return obsdirs
 
