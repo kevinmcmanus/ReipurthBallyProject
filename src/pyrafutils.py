@@ -5,9 +5,25 @@ import pandas as pd, numpy as np
 import tempfile
 sys.path.append('/home/kevin/repos/ReipurthBallyProject')
 from astropy.io import fits
-from src.utils import obs_dirs
+from ccdproc import cosmicray_lacosmic
+#from src.utils import obs_dirs
 from pyraf import iraf
 
+def obs_dirs(data_dir, obj_name):
+    obs_root = os.path.join(data_dir, obj_name)
+    obsdirs = {'obs_root': obs_root,
+               'raw_image':os.path.join(obs_root, 'raw_image'),
+                'raw_bias': os.path.join(obs_root, 'raw_bias'),
+                'combined_bias': os.path.join(obs_root, 'combined_bias'),
+                'xmatch_tables': os.path.join(obs_root, 'xmatch_tables'),
+                'false_image':os.path.join(obs_root, 'false_image'),
+                'registered_image': os.path.join(obs_root, 'registered_image'),
+                'projected_image': os.path.join(obs_root, 'projected_image'),
+                'no_bias': os.path.join(obs_root, 'no_bias'),
+                'distcorr': os.path.join(obs_root, 'distcorr'),
+                'coord_maps': os.path.join(obs_root, 'coord_maps'),
+                'calibration_info': os.path.join(obs_root,'calibration_info')}
+    return obsdirs
 
 class subaru_reduction():
 
@@ -59,7 +75,7 @@ class subaru_reduction():
         return self._geomapres2dict(res), res_df
     
  
-    def transform_image(self, image_name, inverse_map=False):
+    def transform_image(self, image_name, inverse_map=False, remove_cosmic_rays=False):
         fileno, tmp_fits = tempfile.mkstemp(suffix='.fits')
         # just need path name so close the file
         os.close(fileno)
@@ -73,7 +89,7 @@ class subaru_reduction():
         
         # convert to floats
         data = data.astype(np.float32)
-        hdr.pop('BLANK')
+        hdr.pop('BLANK', None)
         hdr['IGNRVAL'] = -32768
         phdu = fits.PrimaryHDU(data = data, header=hdr)
         phdu.writeto(tmp_fits, overwrite=True)
@@ -88,7 +104,13 @@ class subaru_reduction():
         with fits.open(tmp_fits) as t:
             t_data = np.where(t[0].data > 0, t[0].data, np.nan)
         # with fits.open(false_in) as f:
-        #     f_hdr = f[0].header
+        #      f_hdr = f[0].header
+
+        if remove_cosmic_rays:
+            #zap the cosmic rays
+            t_data, mask = cosmicray_lacosmic(t_data)
+            t_data = t_data.value
+
         f_hdr = hdr
         f_hdr.pop('BLANK', None)
         f_hdr['IGNRVAL'] = -32768
@@ -102,18 +124,4 @@ class subaru_reduction():
 
         return res
 
-def obs_dirs(data_dir, obj_name):
-    obs_root = os.path.join(data_dir, obj_name)
-    obsdirs = {'obs_root': obs_root,
-               'raw_image':os.path.join(obs_root, 'raw_image'),
-                'raw_bias': os.path.join(obs_root, 'raw_bias'),
-                'combined_bias': os.path.join(obs_root, 'combined_bias'),
-                'xmatch_tables': os.path.join(obs_root, 'xmatch_tables'),
-                'false_image':os.path.join(obs_root, 'false_image'),
-                'registered_image': os.path.join(obs_root, 'registered_image'),
-                'no_bias': os.path.join(obs_root, 'no_bias'),
-                'distcorr': os.path.join(obs_root, 'distcorr'),
-                'coord_maps': os.path.join(obs_root, 'coord_maps'),
-                'calibration_info': os.path.join(obs_root,'calibration_info')}
-    return obsdirs
 

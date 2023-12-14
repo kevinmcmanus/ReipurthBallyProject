@@ -47,21 +47,29 @@ def chan_slicer(chan_info, chan):
              'col': slice(chan_info['x_eff'][channel][0]-1, chan_info['x_eff'][channel][1])}
     return {'oscan':oscan, 'eff':eff, 'gain': chan_info['gain'][channel]}
 
-def chan_rem_oscan(data, ci, chan):
+def chan_rem_oscan(data, ci, chan, bias):
     cs = chan_slicer(ci, chan)
-    #median for each row in the overscan region for the channel
-    meds = np.median(data[cs['oscan']['row'], cs['oscan']['col']], axis=1)
 
-    # subtract off the medians from the effective region
+    # get the effective region for the channel
     eff_reg = data[cs['eff']['row'], cs['eff']['col']]
-    eff_reg -= meds.reshape(-1,1)
+
+    if bias is None:
+        #median for each row in the overscan region for the channel
+        meds = np.median(data[cs['oscan']['row'], cs['oscan']['col']], axis=1)
+
+        # subtract off the medians from the effective region
+        eff_reg -= meds.reshape(-1,1)
+    else:
+        #subtract off the bias of the region
+        bias_reg = bias[cs['eff']['row'], cs['eff']['col']]
+        eff_reg -= bias_reg
     
     # convert to electrons
     eff_reg *= cs['gain']
 
     return eff_reg
 
-def remove_oscan(hdr, data):
+def remove_oscan(hdr, data, bias=None):
 
     channel_info = get_channel_info(hdr)
 
@@ -71,9 +79,10 @@ def remove_oscan(hdr, data):
         channels = np.flip(channels)
 
     #remove the overscan from each region(channel) of the image array
-    eff_regs = [chan_rem_oscan(data, channel_info, chan) for chan in channels]
+    eff_regs = [chan_rem_oscan(data, channel_info, chan, bias) for chan in channels]
 
     no_oscan = np.hstack(eff_regs)
+
     #adjust the WCS in the header
     new_hdr = hdr.copy()
 
@@ -89,7 +98,10 @@ def remove_oscan(hdr, data):
     new_hdr['COMMENT'] = '-------------- WCS Adjustment --------------------------'
     new_hdr['COMMENT'] = '--------------------------------------------------------'
     new_hdr['COMMENT'] = f'CRPIX1: {min_x}, CRPIX2: {min_y}'
-
+    new_hdr['COMMENT'] = '-------------- Bias Subtraction ------------------------'
+    new_hdr['COMMENT'] = 'Bias computed from Overscan regions' if bias is None \
+                            else 'Bias computed from file'
+    new_hdr.pop('BLANK', None) # ditch invalid keyword for 32-bit float fits
     return new_hdr, no_oscan
 
 if __name__ == '__main__':
