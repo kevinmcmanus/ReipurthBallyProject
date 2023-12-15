@@ -3,7 +3,7 @@
 import sys, os
 import pandas as pd, numpy as np
 import tempfile
-sys.path.append('/home/kevin/repos/ReipurthBallyProject')
+#sys.path.append('/home/kevin/repos/ReipurthBallyProject')
 from astropy.io import fits
 from ccdproc import cosmicray_lacosmic
 #from src.utils import obs_dirs
