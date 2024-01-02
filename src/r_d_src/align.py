@@ -8,6 +8,7 @@ from astropy.coordinates import SkyCoord
 import astroalign as aa
 import sep
 import numpy as np
+import pandas as pd
 
 import warnings
 from matplotlib import pyplot as plt
@@ -15,65 +16,59 @@ from matplotlib import colors as colors
 from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
 from ccdproc import ImageFileCollection
-
+import skimage as sk
+import sep
 import argparse
 
 sys.path.append(os.path.expanduser('~/repos/runawaysearch/src'))
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 
 from utils import obs_dirs
+from r_d_src.coo_utils import coo2df
 
+def find_objects(img, thresh = 3):
+    #img = img_data.byteswap().newbyteorder()
+    bkg = sep.Background(img)
+    bkg_img = bkg.back() #2d array of background
 
-def align_image(dirs, imgname, maxiter=3):
+    img_noback = img - bkg
+    objects = sep.extract(img_noback, thresh=thresh, err = bkg.globalrms)
+    objects_df = pd.DataFrame(objects)
+    return objects_df
+
+def align_image(dirs, inpath, outpath):
 
     # get the image
-    imgfits =  os.path.join(dirs['no_bias'], imgname)
-    with fits.open(imgfits) as f:
+    with fits.open(inpath) as f:
         img_hdr = f[0].header.copy()
         img_data = f[0].data.copy()
     img_data = img_data.astype(float)
 
-    #get the false image:
-    imgfits =  os.path.join(dirs['false_image'], imgname)
-    with fits.open(imgfits) as f:
-        false_hdr = f[0].header.copy()
-        false_data = f[0].data.copy()
+    detector = img_hdr['DETECTOR']
+
+    coo_path = os.path.join(dirs['coord_maps'], detector+'.coo')
+
+    coo_df = coo2df(coo_path)
+    src = np.array([coo_df.x_in, coo_df.y_in]).T
+    dst = np.array([coo_df.x_ref, coo_df.y_ref]).T
+
+    # we actually need the inverse transform, to get it, swap dst and src as below
+    tran = sk.transform.estimate_transform('polynomial', dst, src, 3)
+
+    obj_df = find_objects(img_data, thresh=50.0)
+    print(f'Objects found: {len(obj_df)}')
+
+    img_new = sk.transform.warp(img_data, tran, cval = np.nan)
+    img_new = img_new.astype(np.float32)
+
+    #write out the result
+    phdu = fits.PrimaryHDU(data = img_new, header=img_hdr)
+
+    phdu.writeto(outpath, overwrite=True)
 
 
-    # initialize iteration
-    iterno = maxiter
-    registered_image = img_data
-
-    # iterate
-    # while iterno > 0:
-
-    #     registered_image, footprint = aa.register(registered_image, false_data,
-    #                                                detection_sigma=150,
-    #                                                propagate_mask  = True,
-    #                                                max_control_points=100,
-    #                                                fill_value=np.nan)
-
-    #     iterno -= 1
-
-    registered_image, footprint = aa.register(img_data, false_data,
-                                                detection_sigma=50,
-                                                propagate_mask  = True,
-                                                max_control_points=100,
-                                                fill_value=np.nan)
-    # fix up the result
-    registered_image = registered_image.astype(np.float32)
-    registered_image = np.where(~np.isnan(registered_image), registered_image, -32768)
-    # fits header & write result 
-    # WCS(false_image) same as WCS(image) (image transformed within that WCS)
-    # Need all the other hdr info so use the img_hdr below.
-    img_hdr['IGNRVAL'] = -32768
-    phdu = fits.PrimaryHDU(data = registered_image, header=false_hdr)
-    #phdu.scale('int16')
-    regfits =  os.path.join(dirs['registered_image'], imgname)
-    phdu.writeto(regfits, overwrite=True)
 
 
-   
 if __name__ == "__main__":
     import sep
 
@@ -91,10 +86,13 @@ if __name__ == "__main__":
 
     dirs = obs_dirs(obs_root, objname)
 
-    #im_collection =  ImageFileCollection(dirs['distcorr'],glob_include='g*.fits')
     im_collection =  ImageFileCollection(dirs['no_bias'],glob_include='S*.fits')
 
-    sep.set_extract_pixstack(5000000)
+
     for imgname in im_collection.files:
-        align_image(dirs, imgname)
+        inpath = os.path.join(dirs['no_bias'], imgname)
+        outpath = os.path.join(dirs['registered_image'], imgname)
+        print(f'Input: {inpath}')
+        align_image(dirs, inpath, outpath)
+        print()
 
