@@ -7,7 +7,7 @@ import tempfile
 from astropy.io import fits
 from ccdproc import cosmicray_lacosmic
 #from src.utils import obs_dirs
-from pyraf import iraf
+#from pyraf import iraf
 
 def obs_dirs(data_dir, obj_name):
     obs_root = os.path.join(data_dir, obj_name)
