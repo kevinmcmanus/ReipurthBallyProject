@@ -25,6 +25,16 @@ def obs_dirs(data_dir, obj_name):
                 'calibration_info': os.path.join(obs_root,'calibration_info')}
     return obsdirs
 
+def coo2df(coopath):
+    coo_df = pd.read_csv(coopath, names=['x_ref', 'y_ref','x_in','y_in'],
+                         delim_whitespace=True, comment='#')
+    return coo_df
+
+def df2coo(df, coopath):
+    df.to_csv(coopath, header=False, index=False, sep=' ')
+
+
+
 class subaru_reduction():
 
     def __init__(self, objname, rootdir):
@@ -63,11 +73,22 @@ class subaru_reduction():
         results = detector+'.out' if not inverse_map else detector+'inv.out'
         results_path = os.path.join(self.obs_dirs['coord_maps'], results)
 
+        if inverse_map:
+            fileno, tmp_coo = tempfile.mkstemp(suffix='.fits')
+            # just need path name so close the file
+            os.close(fileno)
+            df = coo2df(coo_file)
+            df[['x_in', 'y_in','x_ref', 'y_ref']].to_csv(tmp_coo, header=False, index=False, sep=' ')
+            coo_file = tmp_coo
+
         #do the deed
         res = iraf.geomap(coo_file, db_file, 1.0,NAXIS1, 1.0, NAXIS2,
                    transforms = map_name, Stdout=1, results=results_path,
                    xxorder=degree, xyorder=degree,  yxorder=degree, yyorder=degree, interactive=False)
         
+        if inverse_map:
+            os.remove(tmp_coo)
+            
         res_df = pd.read_csv(results_path,skiprows=23, sep=' ',
                      names=['x_ref', 'y_ref', 'x_in', 'y_in', 'x_fit', 'y_fit','x_err','y_err'],
                       skipinitialspace=True)
@@ -103,6 +124,7 @@ class subaru_reduction():
         #swap the headers
         with fits.open(tmp_fits) as t:
             t_data = np.where(t[0].data > 0, t[0].data, np.nan)
+            t_hdr = t[0].header
         # with fits.open(false_in) as f:
         #      f_hdr = f[0].header
 
@@ -111,7 +133,8 @@ class subaru_reduction():
             t_data, mask = cosmicray_lacosmic(t_data)
             t_data = t_data.value
 
-        f_hdr = hdr
+        #f_hdr = hdr
+        f_hdr = t_hdr
         f_hdr.pop('BLANK', None)
         f_hdr['IGNRVAL'] = -32768
         f_hdr['DETECTOR'] = detector
