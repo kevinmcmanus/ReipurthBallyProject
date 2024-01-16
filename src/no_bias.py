@@ -83,16 +83,20 @@ def remove_oscan(hdr, data, bias=None):
 
     no_oscan = np.hstack(eff_regs)
 
+    #zap the border pixels
+    no_oscan[:8,:] = np.nan; no_oscan[-8:,:] = np.nan
+    no_oscan[:,:8] = np.nan; no_oscan[:,-8:] = np.nan
+
     #adjust the WCS in the header
     new_hdr = hdr.copy()
 
-    #figure out where the image actually starts
-
-    min_x = channel_info['x_eff'].min(); min_y = channel_info['y_eff'].min()
-    
+    #adjust the reference pixels
     # this is what the SDFRED2 code does
+    min_x = channel_info['x_eff'].min() - 1
+    min_y = channel_info['y_eff'].min() - 1
     new_hdr['CRPIX1'] -= min_x
     new_hdr['CRPIX2'] -= min_y
+
     new_hdr['NAXIS2'], new_hdr['NAXIS1'] = no_oscan.shape
     new_hdr['COMMENT'] = '--------------------------------------------------------'
     new_hdr['COMMENT'] = '-------------- WCS Adjustment --------------------------'

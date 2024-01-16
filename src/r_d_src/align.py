@@ -5,7 +5,7 @@ from astropy.wcs import WCS
 from astropy.time import Time
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
-import astroalign as aa
+#import astroalign as aa
 import sep
 import numpy as np
 import pandas as pd

@@ -82,6 +82,7 @@ def get_gaia_data(imgpath, xmatch_file):
     x,y = wcs.world_to_pixel_values(coords.ra, coords.dec)
     xmatch_tbl['x'] = x + 1 # +1 for fits indexing
     xmatch_tbl['y'] = y + 1 # +1 for fits indexing
+    xmatch_tbl['GaiaId'] = [f'gaia_{i:04d}' for i in range(len(xmatch_tbl))]
 
 
     xmatch_tbl.write(xmatch_file, table_id= 'xmatch',format = 'votable', overwrite=True)
