@@ -14,6 +14,8 @@ from gaiastars import gaiastars as gs
 from utils import obs_dirs
 from astropy.io.votable import parse_single_table
 
+from sklearn.linear_model import LinearRegression
+
 class ImageAlign():
     def __init__(self, obs_root, objname, img_name,thresh=50):
 
@@ -54,7 +56,7 @@ class ImageAlign():
         return catalog_xy, catalog
     
 
-    def __find_closest_gaia__(self, obj_xy):
+    def __find_closest_gaia__(self, obj_xy, flux=None):
 
         #pixel displacements for both x and y
         x_disp = np.array([self.catalog_xy[:,0]-x for x in obj_xy[:,0]])
@@ -63,12 +65,21 @@ class ImageAlign():
         #total displacement
         disp = np.sqrt(x_disp**2 + y_disp**2)
 
+        #flux displacement
+        if flux is not None:
+            flux_disp = np.abs(np.array([self.catalog['phot_g_mean_flux']-f for f in flux]))
+            disp *= np.power(flux_disp,0.25)
+
         #index of minimum displacement for each image object
         min_disp = disp.argmin(axis=1)
 
-        return min_disp
+        #calculate the RMSE
+        err = np.array([disp[i, min_disp[i]] for i in range(len(min_disp))])
+        rmse = np.sqrt((err**2).mean())
 
-    def init_pairs(self):
+        return rmse, min_disp
+
+    def init_pairs(self, polydegree=3):
         #find closest catalog object for each image object
         # use the coo file for this detector to initialize the pairing
 
@@ -79,13 +90,14 @@ class ImageAlign():
         #calculate the transform
         src = coo_df[['x_in', 'y_in']].to_numpy()
         dst = coo_df[['x_ref', 'y_ref']].to_numpy()
-        tran = sk.transform.estimate_transform('polynomial', src,dst, 3)
+        self.polydegree = polydegree
+        tran = sk.transform.estimate_transform('polynomial', src,dst, self.polydegree)
 
         #apply the transform to the objects in the image (calculate obj_hat)
         obj_hat = tran(self.image_objects_xy)
 
         # find the closest gaia object to each obj_hat
-        self.pairs = self.__find_closest_gaia__(obj_hat)
+        self.rmse, self.pairs = self.__find_closest_gaia__(obj_hat)
 
     def iterate_pairs(self):
 
@@ -93,13 +105,19 @@ class ImageAlign():
         src = self.image_objects_xy
         dst = self.catalog_xy[self.pairs]
 
-        tran = sk.transform.estimate_transform('polynomial', src,dst, 3)
+        tran = sk.transform.estimate_transform('polynomial', src,dst, self.polydegree)
 
         #apply the transform to the objects in the image (calculate obj_hat)
         obj_hat = tran(self.image_objects_xy)
 
+        #do the flux:
+        flux_gaia = np.array(self.catalog['phot_g_mean_flux'][self.pairs]) #dependent variable
+        flux_obj = np.array(self.image_objects.flux/self.image_objects.npix).reshape(-1,1) # independent variable
+        linmod = LinearRegression().fit(flux_obj, flux_gaia)
+        flux_hat = linmod.predict(flux_obj)
+
         # find the closest gaia object to each obj_hat
-        self.pairs = self.__find_closest_gaia__(obj_hat)
+        self.rmse, self.pairs = self.__find_closest_gaia__(obj_hat, flux = flux_hat)
 
         #calc and return how many partners changed
         return (old_pairs != self.pairs).sum()
@@ -135,23 +153,27 @@ if __name__ == '__main__':
     imga = ImageAlign(obs_root, obsname, imgname, thresh=150)
 
     # initialize:
-    imga.init_pairs()
+    imga.init_pairs(polydegree=3)
     pair_xy = imga.catalog_xy[imga.pairs]
 
     reg_path = os.path.join(imga.dirs['regions'],f'{imgname}_00.reg')
     pairs2reg(imga.image_objects_xy, pair_xy, reg_path)
 
     pair_changes = np.full(maxiter,-1)
+    rmse = np.full(maxiter, np.nan)
     pair_changes[0] = len(imga.pairs) #everbody got a new partner
+    rmse[0] = imga.rmse
 
     #iterate the rest of the times:
     for i in range(1,maxiter):
         pair_changes[i] = imga.iterate_pairs()
+        rmse[i] = imga.rmse
         reg_path = os.path.join(imga.dirs['regions'],
                                 f'{imgname}_{i:02d}.reg')
         pair_xy = imga.catalog_xy[imga.pairs]
         pairs2reg(imga.image_objects_xy, pair_xy, reg_path)
 
     print(pair_changes)
+    print(rmse)
 
 
