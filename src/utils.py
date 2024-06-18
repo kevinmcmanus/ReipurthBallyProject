@@ -91,6 +91,7 @@ def obs_dirs(data_dir, obj_name):
                 'no_bias': os.path.join(obs_root, 'no_bias'),
                 'distcorr': os.path.join(obs_root, 'distcorr'),
                 'coord_maps': os.path.join(obs_root, 'coord_maps'),
+                'regions': os.path.join(obs_root, 'regions'),
                 'calibration_info': os.path.join(obs_root,'calibration_info')}
     return obsdirs
     

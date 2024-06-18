@@ -107,7 +107,7 @@ if __name__ == "__main__":
     mag_str = f'{max_mag}'
     gs.gaia_source_constraints= [
         '{schema}.gaia_source.phot_g_mean_mag <= ' + mag_str]
-    flux_cols = ['ra',
+    flux_cols = ['source_id', 'ra',
     'dec',
     'parallax',
     'pmra',
@@ -117,7 +117,6 @@ if __name__ == "__main__":
     'phot_bp_mean_mag',
     'phot_rp_mean_mag']+['phot_g_mean_flux', 'phot_bp_mean_flux', 'phot_rp_mean_flux']
     #note: ruwe removed to make query work both dr2 and dr3
-    gs.gaia_column_dict_gaiadr3['gaiadr3.gaia_source']['tblcols'] = flux_cols
     gs.gaia_column_dict_gaiadr3['gaiadr3.gaia_source']['tblcols'] = flux_cols
 
 
