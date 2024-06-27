@@ -41,14 +41,16 @@ class ImageAlign():
 
         img_noback = self.image - bkg
         objects = sep.extract(img_noback, thresh=thresh, err = bkg.globalrms)
-        objects_df = pd.DataFrame(objects)
+        all_objects = pd.DataFrame(objects)
+        objects_df = all_objects.query('npix >= 70').copy()
         objects_xy = objects_df[['x','y']].to_numpy()
         return objects_xy, objects_df
     
     def __load_gaia_catalog__(self, img_name):
         cat_path = os.path.join(self.dirs['xmatch_tables'], img_name+'.xml')
         try:
-            catalog = parse_single_table(cat_path).to_table()
+            all_catalog = parse_single_table(cat_path).to_table()
+            catalog = all_catalog[all_catalog['phot_g_mean_mag'] <= 18]
             catalog_xy = np.array([catalog['x'], catalog['y']]).T
         except:
             catalog = None
@@ -94,10 +96,10 @@ class ImageAlign():
         tran = sk.transform.estimate_transform('polynomial', src,dst, self.polydegree)
 
         #apply the transform to the objects in the image (calculate obj_hat)
-        obj_hat = tran(self.image_objects_xy)
+        self.obj_hat = tran(self.image_objects_xy)
 
         # find the closest gaia object to each obj_hat
-        self.rmse, self.pairs = self.__find_closest_gaia__(obj_hat)
+        self.rmse, self.pairs = self.__find_closest_gaia__(self.obj_hat)
 
     def iterate_pairs(self):
 
@@ -108,21 +110,21 @@ class ImageAlign():
         tran = sk.transform.estimate_transform('polynomial', src,dst, self.polydegree)
 
         #apply the transform to the objects in the image (calculate obj_hat)
-        obj_hat = tran(self.image_objects_xy)
+        self.obj_hat = tran(self.image_objects_xy)
 
-        #do the flux:
-        flux_gaia = np.array(self.catalog['phot_g_mean_flux'][self.pairs]) #dependent variable
-        flux_obj = np.array(self.image_objects.flux/self.image_objects.npix).reshape(-1,1) # independent variable
-        linmod = LinearRegression().fit(flux_obj, flux_gaia)
-        flux_hat = linmod.predict(flux_obj)
+        # #do the flux:
+        # flux_gaia = np.array(self.catalog['phot_g_mean_flux'][self.pairs]) #dependent variable
+        # flux_obj = np.array(self.image_objects.flux/self.image_objects.npix).reshape(-1,1) # independent variable
+        # linmod = LinearRegression().fit(flux_obj, flux_gaia)
+        # flux_hat = linmod.predict(flux_obj)
 
         # find the closest gaia object to each obj_hat
-        self.rmse, self.pairs = self.__find_closest_gaia__(obj_hat, flux = flux_hat)
+        self.rmse, self.pairs = self.__find_closest_gaia__(self.obj_hat) #, flux = flux_hat)
 
         #calc and return how many partners changed
         return (old_pairs != self.pairs).sum()
 
-def pairs2reg(src, dst, reg_path, nameroot='Star'):
+def pairs2reg(src, obj_hat, dst, reg_path, nameroot='Star'):
     reghdr =[ '# Region file format: DS9 version 4.1',
             'global color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1',
         'physical']
@@ -133,16 +135,26 @@ def pairs2reg(src, dst, reg_path, nameroot='Star'):
             reg.write(hdr+'\n')
         for i in range(len(src)):
             title = '{' + f'{nameroot}_{i:03d}' + '}'
+            # source circle
             circ = f'Circle({src[i][0]}, {src[i][1]}, 8) # text={title}'
             reg.write(circ+'\n')
+
+            # calculated point:
+            circ = f'Circle({obj_hat[i][0]}, {obj_hat[i][1]}, 8) # color=white'
+            reg.write(circ+'\n')
+            line = f'line( {src[i][0]}, {src[i][1]}, {obj_hat[i][0]}, {obj_hat[i][1]}) # line=0 1'
+            reg.write(line+'\n')
+
+            #dest circle
             circ = f'Circle({dst[i][0]}, {dst[i][1]}, 8) # color=blue'
             reg.write(circ+'\n')
-            line = f'line( {src[i][0]}, {src[i][1]}, {dst[i][0]}, {dst[i][1]}) # line=0 1'
+            line = f'line( {obj_hat[i][0]}, {obj_hat[i][1]}, {dst[i][0]}, {dst[i][1]}) # line=0 1'
             reg.write(line+'\n')
 
 from r_d_src.coo_utils import coo2df  
 
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
 
     obs_root = r'/home/kevin/Documents/Pelican'
     obsname = 'N-A-L671'
@@ -154,10 +166,17 @@ if __name__ == '__main__':
 
     # initialize:
     imga.init_pairs(polydegree=3)
+
+    # fig, ax = plt.subplots(figsize=(12,6))
+
+    # ax.hist(imga.image_objects.npix, bins=20)
+    # plt.show()
+
+
     pair_xy = imga.catalog_xy[imga.pairs]
 
     reg_path = os.path.join(imga.dirs['regions'],f'{imgname}_00.reg')
-    pairs2reg(imga.image_objects_xy, pair_xy, reg_path)
+    pairs2reg(imga.image_objects_xy, imga.obj_hat, pair_xy, reg_path)
 
     pair_changes = np.full(maxiter,-1)
     rmse = np.full(maxiter, np.nan)
@@ -171,7 +190,7 @@ if __name__ == '__main__':
         reg_path = os.path.join(imga.dirs['regions'],
                                 f'{imgname}_{i:02d}.reg')
         pair_xy = imga.catalog_xy[imga.pairs]
-        pairs2reg(imga.image_objects_xy, pair_xy, reg_path)
+        pairs2reg(imga.image_objects_xy, imga.obj_hat, pair_xy, reg_path)
 
     print(pair_changes)
     print(rmse)
