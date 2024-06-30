@@ -138,6 +138,7 @@ class subaru_reduction():
         f_hdr.pop('BLANK', None)
         f_hdr['IGNRVAL'] = -32768
         f_hdr['DETECTOR'] = detector
+        f_hdr.set('DATA-TYP', 'REGIMG','Registered Image')
         phdu = fits.PrimaryHDU(data = t_data, header=f_hdr)
 
         phdu.writeto(fits_out, overwrite=True)
