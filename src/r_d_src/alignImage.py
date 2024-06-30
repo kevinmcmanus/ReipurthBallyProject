@@ -6,6 +6,11 @@ import sep
 import skimage as sk
 
 from astropy.io import fits
+import astropy.units as u
+import astropy.coordinates as coord
+from astropy.wcs import WCS
+from astropy.wcs.utils import fit_wcs_from_points
+
 sys.path.append(os.path.expanduser('~/repos/runawaysearch/src'))
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 from gaiastars import gaiastars as gs
@@ -16,47 +21,87 @@ from astropy.io.votable import parse_single_table
 
 from sklearn.linear_model import LinearRegression
 
+
+
 class ImageAlign():
-    def __init__(self, obs_root, objname, img_name,thresh=50):
+    def __init__(self, obs_root, objname, img_name,
+                 thresh=50,
+                 obj_minpix = 70,
+                 catalog_maxmag = 18.5):
 
         self.dirs = obs_dirs(obs_root, objname)
 
+        #extraction and matching params
         self.extraction_threshold = thresh
+        self.obj_minpix = obj_minpix
+        self.catalog_maxmag = catalog_maxmag
+
         img_path = os.path.join(self.dirs['no_bias'], img_name+'.fits')
         with fits.open(img_path) as f:
             self.fits_hdr = f[0].header.copy()
             img = f[0].data.copy()
 
-        self.image = img.byteswap().newbyteorder()
-        self.image_objects_xy, self.image_objects = self.__find_objects__(thresh=thresh)
+        self.image = img
+        self.image_objects = self.__find_objects__()
         #make this a little easier to get at
         self.detector = self.fits_hdr['DETECTOR']
         #get the gaia catalog
-        self.catalog_xy, self.catalog = self.__load_gaia_catalog__(img_name)
+        self.catalog = self.__load_gaia_catalog__(img_name)
 
-    def __find_objects__(self,  thresh = 3):
+    def __find_objects__(self):
 
-        bkg = sep.Background(self.image)
+        img = self.image.byteswap().newbyteorder()
+        bkg = sep.Background(img)
         bkg_img = bkg.back() #2d array of background
 
-        img_noback = self.image - bkg
-        objects = sep.extract(img_noback, thresh=thresh, err = bkg.globalrms)
+        img_noback = img - bkg
+        objects = sep.extract(img_noback, 
+                              thresh=self.extraction_threshold,
+                              err = bkg.globalrms)
         all_objects = pd.DataFrame(objects)
-        objects_df = all_objects.query('npix >= 70').copy()
-        objects_xy = objects_df[['x','y']].to_numpy()
-        return objects_xy, objects_df
+        npix = self.obj_minpix
+        objects_df = all_objects.query('npix >= @npix').copy()
+
+        return objects_df
     
     def __load_gaia_catalog__(self, img_name):
         cat_path = os.path.join(self.dirs['xmatch_tables'], img_name+'.xml')
         try:
             all_catalog = parse_single_table(cat_path).to_table()
-            catalog = all_catalog[all_catalog['phot_g_mean_mag'] <= 18]
-            catalog_xy = np.array([catalog['x'], catalog['y']]).T
+            catalog = all_catalog[all_catalog['phot_g_mean_mag'] <= self.catalog_maxmag]
         except:
             catalog = None
             catalog_xy = None
-        return catalog_xy, catalog
+        return  catalog
     
+    def adjust_wcs(self, sip_degree=3):
+        wcs = WCS(self.fits_hdr)
+
+        # get the world coords for the objs in the image
+        img_ra, img_dec = wcs.all_pix2world(self.image_objects.x, self.image_objects.y, 0)
+        img_coords = coord.SkyCoord(img_ra*u.deg, img_dec*u.deg, frame='fk5')
+
+        # coordinates of the catalog objects
+        cat_coords = coord.SkyCoord(self.catalog['RA_MJD'], self.catalog['DEC_MJD'], frame='fk5')
+
+        #match the two
+        match_index, match_distance, _ = coord.match_coordinates_sky(img_coords, cat_coords)
+
+        img_obj_xy = (self.image_objects.x+1, self.image_objects.y+1) #+1 for fits convention
+        new_wcs = fit_wcs_from_points(img_obj_xy, cat_coords[match_index], sip_degree = sip_degree)
+
+        self.new_wcs = new_wcs
+        self.match_index = match_index
+        self.match_distance = match_distance
+        self.sip_degree = sip_degree
+
+    def new_fitsheader(self, comment=None):
+        new_hdr = self.new_wcs.to_header()
+        new_hdr.set('SIPDEG', self.sip_degree, 'SIP degree')
+        new_hdr.set('NOBJ', len(self.image_objects), 'Number of objects in image')
+        new_hdr.set('CATMAXMAG', self.catalog_maxmag, 'Maximum Catlog Magnitude')
+        new_hdr.set('OBJMINPIX', self.obj_minpix, '(pixels) Min Object Size')
+
 
     def __find_closest_gaia__(self, obj_xy, flux=None):
 
@@ -164,35 +209,16 @@ if __name__ == '__main__':
 
     imga = ImageAlign(obs_root, obsname, imgname, thresh=150)
 
-    # initialize:
-    imga.init_pairs(polydegree=3)
+    imga.adjust_wcs(sip_degree=2)
+    print(imga.new_wcs)
 
-    # fig, ax = plt.subplots(figsize=(12,6))
+    new_hdr = imga.new_wcs.to_header()
+    
+    phdu = fits.PrimaryHDU(data = imga.image, header=new_hdr)
 
-    # ax.hist(imga.image_objects.npix, bins=20)
-    # plt.show()
+    outfile = os.path.join(obs_root, obsname, 'test_align', imgname+'.fits')
+    phdu.writeto(outfile, overwrite=True)
 
 
-    pair_xy = imga.catalog_xy[imga.pairs]
-
-    reg_path = os.path.join(imga.dirs['regions'],f'{imgname}_00.reg')
-    pairs2reg(imga.image_objects_xy, imga.obj_hat, pair_xy, reg_path)
-
-    pair_changes = np.full(maxiter,-1)
-    rmse = np.full(maxiter, np.nan)
-    pair_changes[0] = len(imga.pairs) #everbody got a new partner
-    rmse[0] = imga.rmse
-
-    #iterate the rest of the times:
-    for i in range(1,maxiter):
-        pair_changes[i] = imga.iterate_pairs()
-        rmse[i] = imga.rmse
-        reg_path = os.path.join(imga.dirs['regions'],
-                                f'{imgname}_{i:02d}.reg')
-        pair_xy = imga.catalog_xy[imga.pairs]
-        pairs2reg(imga.image_objects_xy, imga.obj_hat, pair_xy, reg_path)
-
-    print(pair_changes)
-    print(rmse)
 
 
