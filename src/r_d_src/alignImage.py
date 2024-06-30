@@ -10,6 +10,7 @@ import astropy.units as u
 import astropy.coordinates as coord
 from astropy.wcs import WCS
 from astropy.wcs.utils import fit_wcs_from_points
+from astropy.time import Time
 
 sys.path.append(os.path.expanduser('~/repos/runawaysearch/src'))
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
@@ -88,7 +89,9 @@ class ImageAlign():
         match_index, match_distance, _ = coord.match_coordinates_sky(img_coords, cat_coords)
 
         img_obj_xy = (self.image_objects.x+1, self.image_objects.y+1) #+1 for fits convention
-        new_wcs = fit_wcs_from_points(img_obj_xy, cat_coords[match_index], sip_degree = sip_degree)
+        new_wcs = fit_wcs_from_points(img_obj_xy, cat_coords[match_index],
+                                      projection = wcs,
+                                      sip_degree = sip_degree)
 
         self.new_wcs = new_wcs
         self.match_index = match_index
@@ -97,12 +100,33 @@ class ImageAlign():
 
     def new_fitsheader(self, comment=None):
         new_hdr = self.new_wcs.to_header()
+
+        # Update the header with values from last input fits
+        #these fields extracted from last fits header to go in the output file
+        fitskwlist = ['DATE-OBS', 'OBSERVER', 'OBJECT', 'EXPTIME', 'DATE-OBS',
+             'BUNIT', 'PROP-ID', 'FILTER01', 'INSTRUME','DETECTOR', 'DET-ID']
+        for kw in fitskwlist:
+            new_hdr.set(kw, self.fits_hdr[kw], self.fits_hdr.comments[kw])
+
+        new_hdr.set('DATA-TYP', 'REGISTERED', 'Registered against GAIA DR3')
         new_hdr.set('SIPDEG', self.sip_degree, 'SIP degree')
         new_hdr.set('NOBJ', len(self.image_objects), 'Number of objects in image')
-        new_hdr.set('CATMAXMAG', self.catalog_maxmag, 'Maximum Catlog Magnitude')
-        new_hdr.set('OBJMINPIX', self.obj_minpix, '(pixels) Min Object Size')
+        new_hdr.set('CATMAXM', self.catalog_maxmag, 'Maximum Catlog Magnitude')
+        new_hdr.set('OBJMINP', self.obj_minpix, '(pixels) Min Object Size')
 
+        #time stamp:
+        nt = Time.now()
+        nt.format='iso'
+        nt.precision=0
+        new_hdr.append(('DATE-REG', nt.isot, '[UTC] Date/time of image registration'), end=True)
 
+        # tack on the comments to the header
+        if comment is not None:
+            new_hdr['COMMENT'] = '----------- Alignment Comment -----------------'
+            new_hdr['COMMENT'] = comment
+
+        return new_hdr
+    
     def __find_closest_gaia__(self, obj_xy, flux=None):
 
         #pixel displacements for both x and y
@@ -205,19 +229,25 @@ if __name__ == '__main__':
     obsname = 'N-A-L671'
     imgname = 'SUPA01469803'
 
-    maxiter=30
 
-    imga = ImageAlign(obs_root, obsname, imgname, thresh=150)
 
-    imga.adjust_wcs(sip_degree=2)
-    print(imga.new_wcs)
 
-    new_hdr = imga.new_wcs.to_header()
-    
-    phdu = fits.PrimaryHDU(data = imga.image, header=new_hdr)
 
-    outfile = os.path.join(obs_root, obsname, 'test_align', imgname+'.fits')
-    phdu.writeto(outfile, overwrite=True)
+    for imgname in ['SUPA01469803','SUPA01469813','SUPA01469823','SUPA01469833','SUPA01469843']:
+
+        imga = ImageAlign(obs_root, obsname, imgname, thresh=100,
+                      obj_minpix=50)
+
+        imga.adjust_wcs(sip_degree=7)
+
+
+        new_hdr = imga.new_fitsheader()
+        
+        phdu = fits.PrimaryHDU(data = imga.image, header=new_hdr)
+
+        outfile = os.path.join(obs_root, obsname, 'test_align', f'{imgname}_deg7.fits')
+        phdu.writeto(outfile, overwrite=True)
+
 
 
 
