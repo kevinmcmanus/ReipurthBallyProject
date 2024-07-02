@@ -133,8 +133,8 @@ class subaru_reduction():
             t_data, mask = cosmicray_lacosmic(t_data)
             t_data = t_data.value
 
-        #f_hdr = hdr
-        f_hdr = t_hdr
+        f_hdr = hdr
+        #f_hdr = t_hdr
         f_hdr.pop('BLANK', None)
         f_hdr['IGNRVAL'] = -32768
         f_hdr['DETECTOR'] = detector
