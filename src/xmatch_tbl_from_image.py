@@ -75,13 +75,13 @@ def get_gaia_data(imgpath, xmatch_file):
                     obstime = t_gaia)
     #move the positions to the obs time and reframe to FK5
     coords = coords_gaia.apply_space_motion(new_obstime=t_obs).fk5
-    xmatch_tbl['RA_MJD'] = coords.ra 
-    xmatch_tbl['DEC_MJD'] = coords.dec
+    xmatch_tbl['RA_OBS'] = coords.ra 
+    xmatch_tbl['DEC_OBS'] = coords.dec
 
-    #add pixel position for each coord
+    #add pixel position for each coord (zero-relative, ie array indexes)
     x,y = wcs.world_to_pixel_values(coords.ra, coords.dec)
-    xmatch_tbl['x'] = x + 1 # +1 for fits indexing
-    xmatch_tbl['y'] = y + 1 # +1 for fits indexing
+    xmatch_tbl['x'] = x
+    xmatch_tbl['y'] = y
     xmatch_tbl['GaiaId'] = [f'gaia_{i:04d}' for i in range(len(xmatch_tbl))]
 
 
