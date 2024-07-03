@@ -72,7 +72,7 @@ if __name__ == '__main__':
         if rtn['status'] != '0': exit(int(rtn['status']))
 
         #coadd into a temp file
-        outfile = os.path.join(tempdir, args.o)
+        outfile = os.path.join(tempdir, os.path.basename(args.o))
         rtn = mAdd(projdir, pimage_tbl,  hdrfile, outfile, coadd=1)
         print(f'mAdd returned: {rtn}')
         if rtn['status'] != '0': exit(int(rtn['status']))
@@ -92,6 +92,11 @@ if __name__ == '__main__':
         nt.format='iso'
         nt.precision=0
         img_hdr.append(('DATE-MOS', nt.isot, '[UTC] Date/time of mosaic creation'), end=True)
+
+        img_hdr.set('DATA-TYP', 'MOSAIC', 'Mosaic Image')
+        #constituent files
+        for i, src in enumerate(args.image_fits):
+            img_hdr.set(f'SRC{i:04d}', src)
 
         # tack on the comments to the header
         if args.c is not None:
