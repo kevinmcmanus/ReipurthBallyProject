@@ -6,8 +6,9 @@ import tempfile
 #sys.path.append('/home/kevin/repos/ReipurthBallyProject')
 from astropy.io import fits
 from ccdproc import cosmicray_lacosmic
-#from src.utils import obs_dirs
-#from pyraf import iraf
+
+from src.utils import obs_dirs
+from pyraf import iraf
 
 def obs_dirs(data_dir, obj_name):
     obs_root = os.path.join(data_dir, obj_name)
@@ -133,8 +134,8 @@ class subaru_reduction():
             t_data, mask = cosmicray_lacosmic(t_data)
             t_data = t_data.value
 
-        #f_hdr = hdr
-        f_hdr = t_hdr
+        f_hdr = hdr
+        #f_hdr = t_hdr
         f_hdr.pop('BLANK', None)
         f_hdr['IGNRVAL'] = -32768
         f_hdr['DETECTOR'] = detector
