@@ -98,6 +98,8 @@ def remove_oscan(hdr, data, bias=None):
     new_hdr['CRPIX2'] -= min_y
 
     new_hdr['NAXIS2'], new_hdr['NAXIS1'] = no_oscan.shape
+
+    new_hdr.set('DATA-TYP','DEBIAS','Bias and overscan removed')
     new_hdr['COMMENT'] = '--------------------------------------------------------'
     new_hdr['COMMENT'] = '-------------- WCS Adjustment --------------------------'
     new_hdr['COMMENT'] = '--------------------------------------------------------'

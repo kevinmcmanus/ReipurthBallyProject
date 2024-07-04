@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
+
 import os, sys, tempfile
+
 
 import sep
 import skimage as sk
@@ -11,7 +13,6 @@ import astropy.coordinates as coord
 from astropy.wcs import WCS
 from astropy.wcs.utils import fit_wcs_from_points
 from astropy.time import Time
-
 
 
 sys.path.append(os.path.expanduser('~/repos/runawaysearch/src'))
@@ -50,8 +51,10 @@ class ImageAlign():
         self.image_objects = self.__find_objects__()
         #make this a little easier to get at
         self.detector = self.fits_hdr['DETECTOR']
+        
         #get the gaia catalog
         self.catalog, self.catalog_xy = self.__load_gaia_catalog__(img_name)
+
 
     def __find_objects__(self):
 
@@ -117,6 +120,7 @@ class ImageAlign():
             new_hdr.set(kw, self.fits_hdr[kw], self.fits_hdr.comments[kw])
 
         new_hdr.set('DATA-TYP', 'REGISTERED', 'Registered against GAIA DR3')
+
         new_hdr.set('POLYDEG', self.poly_degree, 'IRAF/GEOTRAN polynomial degree')
         new_hdr.set('NOBJ', len(self.image_objects), 'Number of objects in image')
         new_hdr.set('CATMAXM', self.catalog_maxmag, 'Maximum Catlog Magnitude')
@@ -135,6 +139,7 @@ class ImageAlign():
 
         return new_hdr
     
+
     def __find_closest_catalog__(self, obj_xy):
 
         #pixel displacements for both x and y
@@ -152,7 +157,7 @@ class ImageAlign():
         rmse = np.sqrt((err**2).mean())
 
         return rmse, min_disp
-    
+
     def update_transform(self, oldimg, old_obj_df):
         """
         performs one iteration of updating the transform
@@ -232,7 +237,7 @@ class ImageAlign():
             img = np.where(img > 0, img, np.nan)
 
         return img
-    
+
     def init_pairs(self, polydegree=3):
         #find closest catalog object for each image object
         # use the coo file for this detector to initialize the pairing
@@ -240,7 +245,6 @@ class ImageAlign():
         #open the coo file
         coo_path = os.path.join(self.dirs['coord_maps'], self.detector+'.coo')
         coo_df = coo2df(coo_path)
-
 
         #calculate the transform
         src = coo_df[['x_in', 'y_in']].to_numpy()
@@ -305,7 +309,7 @@ def pairs2reg(src, obj_hat, dst, reg_path, nameroot='Star'):
             reg.write(line+'\n')
 
 #from r_d_src.coo_utils import coo2df  
-from reproject import reproject_interp
+#from reproject import reproject_interp
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
@@ -314,9 +318,6 @@ if __name__ == '__main__':
     obsname = 'N-A-L671'
     imgname = 'SUPA01469803'
 
-
-
-
     polydeg = 3
     for imgname in ['SUPA01469800','SUPA01469810','SUPA01469820','SUPA01469830','SUPA01469840']:
 
@@ -324,7 +325,6 @@ if __name__ == '__main__':
                       obj_minpix=50)
 
         imga.adjust_image(degree=polydeg)
-
 
         new_hdr = imga.new_fitsheader()
 
@@ -335,11 +335,6 @@ if __name__ == '__main__':
         
         phdu = fits.PrimaryHDU(data=imga.image, header=new_hdr)
 
-
         outfile = os.path.join(obs_root, obsname, 'test_align', f'{imgname}_deg{polydeg:02d}.fits')
+
         phdu.writeto(outfile, overwrite=True)
-
-
-
-
-
