@@ -67,19 +67,22 @@ def get_gaia_data(imgpath, xmatch_file):
     #hard code for gaia dr3:
     t_gaia = Time(2016, scale='tcb',format='jyear')
 
+    #gaia coordinates are ICRS, so reframe as FK5
     coords_gaia = SkyCoord(ra = xmatch_tbl['ra']*u.degree, dec = xmatch_tbl['dec']*u.degree,
                     pm_ra_cosdec = xmatch_tbl['pmra'].filled(fill_value=0.0)*u.mas/u.year,
                     pm_dec = xmatch_tbl['pmdec'].filled(fill_value=0.0)*u.mas/u.year,
                     radial_velocity = xmatch_tbl['radial_velocity'].filled(fill_value=0.0)*u.km/u.second,
                     distance = 1000.0/np.abs(xmatch_tbl['parallax']) * u.pc,
-                    obstime = t_gaia)
-    #move the positions to the obs time and reframe to FK5
-    coords = coords_gaia.apply_space_motion(new_obstime=t_obs).fk5
-    xmatch_tbl['RA_OBS'] = coords.ra 
-    xmatch_tbl['DEC_OBS'] = coords.dec
+                    obstime = t_gaia).fk5
+    
+    #let's see what happens if we don't bother with this
+        # #move the positions to the obs time and reframe to FK5
+        # coords = coords_gaia.apply_space_motion(new_obstime=t_obs).fk5
+        # xmatch_tbl['RA_OBS'] = coords.ra 
+        # xmatch_tbl['DEC_OBS'] = coords.dec
 
     #add pixel position for each coord (zero-relative, ie array indexes)
-    x,y = wcs.world_to_pixel_values(coords.ra, coords.dec)
+    x,y = wcs.world_to_pixel_values(coords_gaia.ra, coords_gaia.dec)
     xmatch_tbl['x'] = x
     xmatch_tbl['y'] = y
     xmatch_tbl['GaiaId'] = [f'gaia_{i:04d}' for i in range(len(xmatch_tbl))]

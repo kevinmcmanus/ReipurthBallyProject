@@ -33,7 +33,8 @@ class ImageAlign():
     def __init__(self, obs_root, objname, img_name,
                  thresh=50,
                  obj_minpix = 70,
-                 catalog_maxmag = 18.5):
+                 catalog_maxmag = 18.5,
+                 maxiter = 5):
 
         self.dirs = obs_dirs(obs_root, objname)
 
@@ -41,14 +42,16 @@ class ImageAlign():
         self.extraction_threshold = thresh
         self.obj_minpix = obj_minpix
         self.catalog_maxmag = catalog_maxmag
+        self.maxiter = maxiter
+        self.rmse_iter = np.full(maxiter, np.nan)
 
         img_path = os.path.join(self.dirs['no_bias'], img_name+'.fits')
         with fits.open(img_path) as f:
             self.fits_hdr = f[0].header.copy()
             img = f[0].data.copy()
 
-        self.image = img
-        self.image_objects = self.__find_objects__()
+        self.original_image = img
+        #self.image_objects = self.__find_objects__(img)
         #make this a little easier to get at
         self.detector = self.fits_hdr['DETECTOR']
         
@@ -56,9 +59,9 @@ class ImageAlign():
         self.catalog, self.catalog_xy = self.__load_gaia_catalog__(img_name)
 
 
-    def __find_objects__(self):
+    def __find_objects__(self, img):
 
-        img = self.image.byteswap().newbyteorder()
+        #img = image.byteswap().newbyteorder()
         bkg = sep.Background(img)
         bkg_img = bkg.back() #2d array of background
 
@@ -82,32 +85,51 @@ class ImageAlign():
             catalog = None
             catalog_xy = None
         return  catalog, catalog_xy
-    
-    def adjust_image(self, degree=3):
-        wcs = WCS(self.fits_hdr)
+
+    def register_image(self, poly_degree=3, maxiter=5):
+
+        self.NOBJ = None
+        self.rmse = []
+        old_image = self.original_image.byteswap().newbyteorder()
+        old_rmse = np.finfo(np.float64).max
+
+        for iter in range(maxiter):
+            new_image, new_rmse = self.adjust_image(old_image, poly_degree=poly_degree)
+            if new_rmse >= old_rmse:
+                break
+            old_rmse = new_rmse
+            self.rmse.append(old_rmse)
+            old_image = new_image
+
+        self.registered_image = new_image.byteswap().newbyteorder()
+        self.poly_degree = poly_degree
+
+    def adjust_image(self, oldimg, poly_degree=3):
+
+        #get the image objects
+        image_objects = self.__find_objects__(oldimg)
+        if self.NOBJ is None:
+            self.NOBJ = len(image_objects)
 
         # get the pixel coords for the objs in the image
-        img_coords = self.image_objects[['x','y']].to_numpy()
+        img_coords = image_objects[['x','y']].to_numpy()
 
         #match img_coords to self.catalog
-        rmse, closest_catalog_index = self.__find_closest_catalog__(img_coords)
+        closest_catalog_index = self.__find_closest_catalog__(img_coords)
 
         # make coo db and transform image in temp directory:
         with tempfile.TemporaryDirectory() as tempdir:
             # create the new coo
             tname = 'transform' # transform name in coo file
-            coo_path = self.__mkcoo__(tempdir, tname,
+            coo_path, rmse = self.__mkcoo__(tempdir, tname,
                                       img_coords, self.catalog_xy[closest_catalog_index],
-                                      degree=degree)
+                                      poly_degree=poly_degree)
 
             # transform the image
-            new_image = self.__geotran__(tempdir, coo_path, tname, self.image)
+            new_image = self.__geotran__(tempdir, coo_path, tname, oldimg)
 
+        return new_image, rmse
 
-        self.image = new_image
-        #self.match_index = match_index
-        self.rmse = rmse
-        self.poly_degree = degree
 
     def new_fitsheader(self, comment=None):
         new_hdr = WCS(self.fits_hdr).to_header()
@@ -122,7 +144,7 @@ class ImageAlign():
         new_hdr.set('DATA-TYP', 'REGISTERED', 'Registered against GAIA DR3')
 
         new_hdr.set('POLYDEG', self.poly_degree, 'IRAF/GEOTRAN polynomial degree')
-        new_hdr.set('NOBJ', len(self.image_objects), 'Number of objects in image')
+        new_hdr.set('NOBJ', self.NOBJ, 'Number of objects in image')
         new_hdr.set('CATMAXM', self.catalog_maxmag, 'Maximum Catlog Magnitude')
         new_hdr.set('OBJMINP', self.obj_minpix, '(pixels) Min Object Size')
 
@@ -131,6 +153,9 @@ class ImageAlign():
         nt.format='iso'
         nt.precision=0
         new_hdr.append(('DATE-REG', nt.isot, '[UTC] Date/time of image registration'), end=True)
+
+        for i, rmse in enumerate(self.rmse):
+            new_hdr.set(f'RMSE{i:02d}', rmse, f'Registration RMSE after iteration {i}')
 
         # tack on the comments to the header
         if comment is not None:
@@ -146,17 +171,13 @@ class ImageAlign():
         x_disp = np.array([self.catalog_xy[:,0]-x for x in obj_xy[:,0]])
         y_disp = np.array([self.catalog_xy[:,1]-y for y in obj_xy[:,1]])
 
-        #total displacement
+        #total displacement array (image objects x catalog objects)
         disp = np.sqrt(x_disp**2 + y_disp**2)
 
         #index of minimum displacement for each image object
-        min_disp = disp.argmin(axis=1)
+        min_disp = disp.argmin(axis=1) # 1 d array
 
-        #calculate the RMSE
-        err = np.array([disp[i, min_disp[i]] for i in range(len(min_disp))])
-        rmse = np.sqrt((err**2).mean())
-
-        return rmse, min_disp
+        return min_disp
 
     def update_transform(self, oldimg, old_obj_df):
         """
@@ -192,16 +213,12 @@ class ImageAlign():
             # return the new image and object df
             return new_image, new_obj_df
         
-    def __mkcoo__(self, tempdir, tname, img_coords, cat_coords, degree=3):
+    def __mkcoo__(self, tempdir, tname, img_coords, cat_coords, poly_degree=3):
         """
         creates a iraf coo database
         """
         NAXIS1 = self.fits_hdr['NAXIS1']
         NAXIS2 = self.fits_hdr['NAXIS2']
-
-        #need min ra and dec for corners
-        wcs = WCS(self.fits_hdr)
-        footprint = wcs.calc_footprint()
         
         coo_path = os.path.join(tempdir, tname+'.txt')
         coo_db = os.path.join(tempdir, tname+'.db')
@@ -213,9 +230,20 @@ class ImageAlign():
         #do the deed
         res = iraf.geomap(coo_path, coo_db, 1.0,NAXIS1, 1.0, NAXIS2,
                    transforms = tname, Stdout=1, results=results_path,
-                   xxorder=degree, xyorder=degree,  yxorder=degree, yyorder=degree, interactive=False)
+                   xxorder=poly_degree, xyorder=poly_degree,
+                   yyorder=poly_degree, yxorder=poly_degree,
+                   interactive=False)
         
-        return coo_db
+        # calculate the rmse: how close is fitted value to catalog value
+        # catalog values in x_ref and y_ref below.
+        res_df = pd.read_csv(results_path,skiprows=23, sep=' ',
+                    names=['x_ref', 'y_ref', 'x_in', 'y_in', 'x_fit', 'y_fit','x_err','y_err'],
+                    skipinitialspace=True)
+        x_resid = res_df.x_ref - res_df.x_fit
+        y_resid = res_df.y_ref - res_df.y_fit
+        rmse = np.sqrt((x_resid**2 + y_resid**2).mean())
+        
+        return coo_db, rmse
     
     def __geotran__(self, tempdir, coo_path, tname, oldimg):
         """
@@ -238,48 +266,6 @@ class ImageAlign():
 
         return img
 
-    def init_pairs(self, polydegree=3):
-        #find closest catalog object for each image object
-        # use the coo file for this detector to initialize the pairing
-
-        #open the coo file
-        coo_path = os.path.join(self.dirs['coord_maps'], self.detector+'.coo')
-        coo_df = coo2df(coo_path)
-
-        #calculate the transform
-        src = coo_df[['x_in', 'y_in']].to_numpy()
-        dst = coo_df[['x_ref', 'y_ref']].to_numpy()
-        self.polydegree = polydegree
-        tran = sk.transform.estimate_transform('polynomial', src,dst, self.polydegree)
-
-        #apply the transform to the objects in the image (calculate obj_hat)
-        self.obj_hat = tran(self.image_objects_xy)
-
-        # find the closest gaia object to each obj_hat
-        self.rmse, self.pairs = self.__find_closest_gaia__(self.obj_hat)
-
-    def iterate_pairs(self):
-
-        old_pairs = self.pairs
-        src = self.image_objects_xy
-        dst = self.catalog_xy[self.pairs]
-
-        tran = sk.transform.estimate_transform('polynomial', src,dst, self.polydegree)
-
-        #apply the transform to the objects in the image (calculate obj_hat)
-        self.obj_hat = tran(self.image_objects_xy)
-
-        # #do the flux:
-        # flux_gaia = np.array(self.catalog['phot_g_mean_flux'][self.pairs]) #dependent variable
-        # flux_obj = np.array(self.image_objects.flux/self.image_objects.npix).reshape(-1,1) # independent variable
-        # linmod = LinearRegression().fit(flux_obj, flux_gaia)
-        # flux_hat = linmod.predict(flux_obj)
-
-        # find the closest gaia object to each obj_hat
-        self.rmse, self.pairs = self.__find_closest_gaia__(self.obj_hat) #, flux = flux_hat)
-
-        #calc and return how many partners changed
-        return (old_pairs != self.pairs).sum()
 
 def pairs2reg(src, obj_hat, dst, reg_path, nameroot='Star'):
     reghdr =[ '# Region file format: DS9 version 4.1',
@@ -319,12 +305,12 @@ if __name__ == '__main__':
     imgname = 'SUPA01469803'
 
     polydeg = 3
-    for imgname in ['SUPA01469800','SUPA01469810','SUPA01469820','SUPA01469830','SUPA01469840']:
+    for imgname in ['SUPA01469805','SUPA01469815','SUPA01469825','SUPA01469835','SUPA01469845']:
 
         imga = ImageAlign(obs_root, obsname, imgname, thresh=100,
                       obj_minpix=50)
 
-        imga.adjust_image(degree=polydeg)
+        imga.register_image(poly_degree=polydeg, maxiter=10)
 
         new_hdr = imga.new_fitsheader()
 
@@ -333,7 +319,7 @@ if __name__ == '__main__':
         # with fits.open(imgpath) as hdul:                       
         #     new_data, footprint = reproject_interp(hdul[0], new_hdr)
         
-        phdu = fits.PrimaryHDU(data=imga.image, header=new_hdr)
+        phdu = fits.PrimaryHDU(data=imga.registered_image, header=new_hdr)
 
         outfile = os.path.join(obs_root, obsname, 'test_align', f'{imgname}_deg{polydeg:02d}.fits')
 
