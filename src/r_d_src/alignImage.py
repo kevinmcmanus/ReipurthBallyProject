@@ -104,7 +104,30 @@ class ImageAlign():
         self.registered_image = new_image.byteswap().newbyteorder()
         self.poly_degree = poly_degree
 
-    def adjust_image(self, oldimg, poly_degree=3):
+    def create_coordmap(self, mapdir, mapname, poly_degree=3, maxiter=5):
+        self.NOBJ = None
+        self.rmse = []
+        old_image = self.original_image.byteswap().newbyteorder()
+        old_rmse = np.finfo(np.float64).max
+
+        for iter in range(maxiter):
+            new_image, new_rmse = self.adjust_image(old_image,
+                     poly_degree=poly_degree,
+                     iter=iter,
+                     mapdir=mapdir, mapname=mapname)
+            if new_rmse >= old_rmse:
+                break
+            old_rmse = new_rmse
+            self.rmse.append(old_rmse)
+            old_image = new_image
+
+        self.registered_image = new_image.byteswap().newbyteorder()
+        self.poly_degree = poly_degree
+
+
+
+    def adjust_image(self, oldimg, poly_degree=3, iter=None,
+                     mapdir=None, mapname=None):
 
         #get the image objects
         image_objects = self.__find_objects__(oldimg)
@@ -118,15 +141,18 @@ class ImageAlign():
         closest_catalog_index = self.__find_closest_catalog__(img_coords)
 
         # make coo db and transform image in temp directory:
-        with tempfile.TemporaryDirectory() as tempdir:
-            # create the new coo
-            tname = 'transform' # transform name in coo file
-            coo_path, rmse = self.__mkcoo__(tempdir, tname,
-                                      img_coords, self.catalog_xy[closest_catalog_index],
-                                      poly_degree=poly_degree)
+        tempdir = mapdir if mapdir is not None else tempfile.TemporaryDirectory()
+        # create the new coo
+        # transform name in coo file
+        tname = mapname if mapname is not None else 'transform'
+        coo_path, rmse = self.__mkcoo__(tempdir, tname,
+                                    img_coords, self.catalog_xy[closest_catalog_index],
+                                    iter=iter,
+                                    poly_degree=poly_degree)
 
-            # transform the image
-            new_image = self.__geotran__(tempdir, coo_path, tname, oldimg)
+        # transform the image
+        new_image = self.__geotran__(tempdir, coo_path, tname, oldimg, iter=iter)
+
 
         return new_image, rmse
 
@@ -179,41 +205,9 @@ class ImageAlign():
 
         return min_disp
 
-    def update_transform(self, oldimg, old_obj_df):
-        """
-        performs one iteration of updating the transform
-        given the old image and the object contained in it,
-        find the closest pairing with the catalog objects,
-        recalculate the transform, transform the image,
-        calculate the object positions in the newly tranformed image
-
-        return the transformed image and the new object positions
-        """
-        wcs = WCS(self.fits_hdr)
-
-        with tempfile.TemporaryDirectory() as tempdir:
-
-            #get the ra, dec for each of the image objects
-            img_ra, img_dec = wcs.all_pix2world(old_obj_df.x, old_obj_df.y, 0)
-            img_coords = coord.SkyCoord(img_ra*u.deg, img_dec*u.deg, frame='fk5')
-
-            # match to catalog
-            match_index, match_distance, _ = coord.match_coordinates_sky(img_coords, self.cat_coords)
-
-            # create coofile and coord map
-            tname = 'transform' # transform name in coo file
-            coo_path = self.__mkcoo__(tempdir, tname, img_coords, self.cat_coords[match_index])
-
-            # transform the image
-            new_image = self.__geotran__(tempdir, coo_path, tname, oldimg)
-
-            # pull the stars out of the new image
-            new_obj_df = self.__find_objects__(new_image)
-
-            # return the new image and object df
-            return new_image, new_obj_df
-        
-    def __mkcoo__(self, tempdir, tname, img_coords, cat_coords, poly_degree=3):
+    def __mkcoo__(self, tempdir, tname,
+                   img_coords, cat_coords, 
+                   iter=None, poly_degree=3):
         """
         creates a iraf coo database
         """
@@ -222,14 +216,15 @@ class ImageAlign():
         
         coo_path = os.path.join(tempdir, tname+'.txt')
         coo_db = os.path.join(tempdir, tname+'.db')
-        results_path = os.path.join(tempdir, tname+'.out')
+        transname = tname if iter is None else f'{tname}_{iter:02d}'
+        results_path = os.path.join(tempdir, transname+'.out')
 
         coo = np.array([cat_coords[:,0], cat_coords[:,1], img_coords[:,0], img_coords[:,1]] ).T
         np.savetxt(coo_path, coo)
 
         #do the deed
         res = iraf.geomap(coo_path, coo_db, 1.0,NAXIS1, 1.0, NAXIS2,
-                   transforms = tname, Stdout=1, results=results_path,
+                   transforms = transname, Stdout=1, results=results_path,
                    xxorder=poly_degree, xyorder=poly_degree,
                    yyorder=poly_degree, yxorder=poly_degree,
                    interactive=False)
@@ -245,7 +240,8 @@ class ImageAlign():
         
         return coo_db, rmse
     
-    def __geotran__(self, tempdir, coo_path, tname, oldimg):
+    def __geotran__(self, tempdir, coo_path, tname, oldimg,
+                    iter=None):
         """
         cover for iraf geotran
         """
@@ -254,9 +250,11 @@ class ImageAlign():
         phdu = fits.PrimaryHDU(data = oldimg, header=self.fits_hdr)
         phdu.writeto(fits_in, overwrite=True)
 
+        transname = tname if iter is None else f'{tname}_{iter:02d}'
+
         #do the transform into an output file
         fits_out = os.path.join(tempdir, 'fits_out.fits')
-        res = iraf.geotran(fits_in, fits_out, coo_path, tname,
+        res = iraf.geotran(fits_in, fits_out, coo_path, transname,
                         boundary='constant', constant=-32768, Stdout=1)
         
         # fix up the result:
@@ -302,25 +300,29 @@ if __name__ == '__main__':
 
     obs_root = r'/home/kevin/Documents/Pelican'
     obsname = 'N-A-L671'
-    imgname = 'SUPA01469803'
+    imgname = 'SUPA01469840'
 
     polydeg = 3
-    for imgname in ['SUPA01469805','SUPA01469815','SUPA01469825','SUPA01469835','SUPA01469845']:
+    #for imgname in ['SUPA01469805','SUPA01469815','SUPA01469825','SUPA01469835','SUPA01469845']:
 
-        imga = ImageAlign(obs_root, obsname, imgname, thresh=100,
-                      obj_minpix=50)
+    imga = ImageAlign(obs_root, obsname, imgname, thresh=100,
+                    obj_minpix=50)
+    
+    imga.create_coordmap(os.path.join(obs_root, obsname, 'new_coord_maps'),
+                         'nausicaa', maxiter=10)
+    print(imga.rmse)
 
-        imga.register_image(poly_degree=polydeg, maxiter=10)
+        # imga.register_image(poly_degree=polydeg, maxiter=10)
 
-        new_hdr = imga.new_fitsheader()
+        # new_hdr = imga.new_fitsheader()
 
-        # #reproject to the new header
-        # imgpath = os.path.join(obs_root, obsname, 'no_bias', imgname+'.fits')
-        # with fits.open(imgpath) as hdul:                       
-        #     new_data, footprint = reproject_interp(hdul[0], new_hdr)
+        # # #reproject to the new header
+        # # imgpath = os.path.join(obs_root, obsname, 'no_bias', imgname+'.fits')
+        # # with fits.open(imgpath) as hdul:                       
+        # #     new_data, footprint = reproject_interp(hdul[0], new_hdr)
         
-        phdu = fits.PrimaryHDU(data=imga.registered_image, header=new_hdr)
+        # phdu = fits.PrimaryHDU(data=imga.registered_image, header=new_hdr)
 
-        outfile = os.path.join(obs_root, obsname, 'test_align', f'{imgname}_deg{polydeg:02d}.fits')
+        # outfile = os.path.join(obs_root, obsname, 'test_align', f'{imgname}_deg{polydeg:02d}.fits')
 
-        phdu.writeto(outfile, overwrite=True)
+        # phdu.writeto(outfile, overwrite=True)
