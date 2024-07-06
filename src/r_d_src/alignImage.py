@@ -86,23 +86,21 @@ class ImageAlign():
             catalog_xy = None
         return  catalog, catalog_xy
 
-    def register_image(self, poly_degree=3, maxiter=5):
+    def register_image(self, transpath):
 
-        self.NOBJ = None
-        self.rmse = []
-        old_image = self.original_image.byteswap().newbyteorder()
-        old_rmse = np.finfo(np.float64).max
+        transforms = self.__gettransforms__(transpath)
+        old_image = self.original_image
+        #temp working dir
+        with tempfile.TemporaryDirectory() as tempdir:
+                # loop through the transforms
+                for transform in transforms:
+                    # transform the image
+                    new_image = self.__geotran__(tempdir, transpath, transform, old_image, iter=None)
+                    old_image = new_image
 
-        for iter in range(maxiter):
-            new_image, new_rmse = self.adjust_image(old_image, poly_degree=poly_degree)
-            if new_rmse >= old_rmse:
-                break
-            old_rmse = new_rmse
-            self.rmse.append(old_rmse)
-            old_image = new_image
 
-        self.registered_image = new_image.byteswap().newbyteorder()
-        self.poly_degree = poly_degree
+        self.registered_image = new_image
+        self.poly_degree = 9999
 
     def create_coordmap(self, mapdir, mapname, poly_degree=3, maxiter=5):
         self.NOBJ = None
@@ -170,7 +168,7 @@ class ImageAlign():
         new_hdr.set('DATA-TYP', 'REGISTERED', 'Registered against GAIA DR3')
 
         new_hdr.set('POLYDEG', self.poly_degree, 'IRAF/GEOTRAN polynomial degree')
-        new_hdr.set('NOBJ', self.NOBJ, 'Number of objects in image')
+        #new_hdr.set('NOBJ', self.NOBJ, 'Number of objects in image')
         new_hdr.set('CATMAXM', self.catalog_maxmag, 'Maximum Catlog Magnitude')
         new_hdr.set('OBJMINP', self.obj_minpix, '(pixels) Min Object Size')
 
@@ -180,8 +178,8 @@ class ImageAlign():
         nt.precision=0
         new_hdr.append(('DATE-REG', nt.isot, '[UTC] Date/time of image registration'), end=True)
 
-        for i, rmse in enumerate(self.rmse):
-            new_hdr.set(f'RMSE{i:02d}', rmse, f'Registration RMSE after iteration {i}')
+        # for i, rmse in enumerate(self.rmse):
+        #     new_hdr.set(f'RMSE{i:02d}', rmse, f'Registration RMSE after iteration {i}')
 
         # tack on the comments to the header
         if comment is not None:
@@ -264,6 +262,15 @@ class ImageAlign():
 
         return img
 
+    def __gettransforms__(self, transpath):
+        transforms = []
+        with open(transpath,'r') as transf:
+            for line in transf:
+                if line.startswith('begin'):
+                    tname = line.strip().split('\t')[1]
+                    transforms.append(tname)
+        transforms.sort()
+        return transforms
 
 def pairs2reg(src, obj_hat, dst, reg_path, nameroot='Star'):
     reghdr =[ '# Region file format: DS9 version 4.1',
@@ -300,29 +307,30 @@ if __name__ == '__main__':
 
     obs_root = r'/home/kevin/Documents/Pelican'
     obsname = 'N-A-L671'
-    imgname = 'SUPA01469840'
+
 
     polydeg = 3
-    #for imgname in ['SUPA01469805','SUPA01469815','SUPA01469825','SUPA01469835','SUPA01469845']:
 
-    imga = ImageAlign(obs_root, obsname, imgname, thresh=100,
-                    obj_minpix=50)
-    
-    imga.create_coordmap(os.path.join(obs_root, obsname, 'new_coord_maps'),
-                         'nausicaa', maxiter=10)
-    print(imga.rmse)
 
-        # imga.register_image(poly_degree=polydeg, maxiter=10)
+    # create coordinate map from 9840
+    # imgname = 'SUPA01469840'
+    # imga = ImageAlign(obs_root, obsname, imgname, thresh=100,
+    #                 obj_minpix=50)
+    # imga.create_coordmap(os.path.join(obs_root, obsname, 'new_coord_maps'),
+    #                      'nausicaa', maxiter=10)
+    # print(imga.rmse)
 
-        # new_hdr = imga.new_fitsheader()
+    # register the images to the new map
+    coord_path = os.path.join(obs_root, obsname, 'new_coord_maps', 'nausicaa.db')
+    for imgname in ['SUPA01469800','SUPA01469810','SUPA01469820','SUPA01469830','SUPA01469840']:
+        imga = ImageAlign(obs_root, obsname, imgname, thresh=100,
+                        obj_minpix=50)
+        imga.register_image(coord_path)
 
-        # # #reproject to the new header
-        # # imgpath = os.path.join(obs_root, obsname, 'no_bias', imgname+'.fits')
-        # # with fits.open(imgpath) as hdul:                       
-        # #     new_data, footprint = reproject_interp(hdul[0], new_hdr)
+        new_hdr = imga.new_fitsheader()
         
-        # phdu = fits.PrimaryHDU(data=imga.registered_image, header=new_hdr)
+        phdu = fits.PrimaryHDU(data=imga.registered_image, header=new_hdr)
 
-        # outfile = os.path.join(obs_root, obsname, 'test_align', f'{imgname}_deg{polydeg:02d}.fits')
+        outfile = os.path.join(obs_root, obsname, 'test_align', f'{imgname}_deg{polydeg:02d}.fits')
 
-        # phdu.writeto(outfile, overwrite=True)
+        phdu.writeto(outfile, overwrite=True)
