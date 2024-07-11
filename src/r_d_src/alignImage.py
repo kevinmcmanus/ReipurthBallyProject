@@ -32,7 +32,7 @@ from sklearn.linear_model import LinearRegression
 class ImageAlign():
     def __init__(self, obs_root, objname, img_name,
                  thresh=50,
-                 obj_minpix = 70,
+                 obj_minpix = 70, obj_maxpix=1000,
                  catalog_maxmag = 18.5,
                  maxiter = 5):
 
@@ -41,6 +41,7 @@ class ImageAlign():
         #extraction and matching params
         self.extraction_threshold = thresh
         self.obj_minpix = obj_minpix
+        self.obj_maxpix = obj_maxpix
         self.catalog_maxmag = catalog_maxmag
         self.maxiter = maxiter
         self.rmse_iter = np.full(maxiter, np.nan)
@@ -70,8 +71,8 @@ class ImageAlign():
                               thresh=self.extraction_threshold,
                               err = bkg.globalrms)
         all_objects = pd.DataFrame(objects)
-        npix = self.obj_minpix
-        objects_df = all_objects.query('npix >= @npix').copy()
+        minpix = self.obj_minpix; maxpix = self.obj_maxpix
+        objects_df = all_objects.query('npix >= @minpix and npix <= @maxpix').copy()
 
         return objects_df
     
@@ -118,7 +119,7 @@ class ImageAlign():
             for iter in range(maxiter):
                 trans_name = f'{trans_root}_{iter:02d}'
                 new_db = os.path.join(temp_dir, trans_name+'.db')
-                new_image, new_rmse = self.iterate_transform(temp_dir, old_image,
+                new_image, new_rmse, nobj = self.iterate_transform(temp_dir, old_image,
                         new_db, trans_name, poly_degree=poly_degree)
 
                 if new_rmse >= old_rmse:
@@ -126,6 +127,8 @@ class ImageAlign():
                 old_rmse = new_rmse
                 self.rmse.append(old_rmse)
                 old_image = new_image
+                if self.NOBJ is None:
+                    self.NOBJ = nobj
                 #update the 'real' database
                 with open(trans_path,'a') as trans:
                     with open(new_db, 'r') as temp:
@@ -135,7 +138,8 @@ class ImageAlign():
         self.poly_degree = poly_degree
 
         #return database record with bunch o' stuff
-        retval = {'transpath': trans_path, 'detector': self.detector, 'niter': len(self.rmse),
+        retval = {'transpath': trans_path, 'detector': self.detector,
+                  'image_objects':self.NOBJ, 'catalog_objects':len(self.catalog),'niter': len(self.rmse),
                   'initial_rmse': self.rmse[0], 'final_rmse':self.rmse[-1],
                   'poly_degree':poly_degree}
 
@@ -149,8 +153,6 @@ class ImageAlign():
 
         #get the image objects
         image_objects = self.__find_objects__(oldimg)
-        if self.NOBJ is None:
-            self.NOBJ = len(image_objects)
 
         # get the pixel coords for the objs in the image
         img_coords = image_objects[['x','y']].to_numpy()
@@ -168,7 +170,7 @@ class ImageAlign():
         # transform the image
         new_image = self.__geotran__(temp_dir, trans_db, trans_name, oldimg)
 
-        return new_image, rmse
+        return new_image, rmse, len(image_objects)
 
 
     def new_fitsheader(self, comment=None):
@@ -325,9 +327,9 @@ if __name__ == '__main__':
 
 
     #create coordinate map from 9840
-    imgname = 'SUPA01469840'
-        # 
-    #     #
+    # imgname = 'SUPA01469840'
+    #     # 
+    # # #     #
 
     db_recs = []
     images = os.listdir(os.path.join(obs_root,obsname, 'no_bias'))
@@ -335,7 +337,7 @@ if __name__ == '__main__':
         imgname = os.path.splitext(img)[0]
 
         imga = ImageAlign(obs_root, obsname, imgname, thresh=100,
-                        obj_minpix=50)
+                        obj_minpix=50, obj_maxpix=50000)
         trans_path = os.path.join(obs_root, obsname, 'new_coord_maps',imgname+'.db')
         db_rec = imga.create_coordmap(trans_path, trans_root=imgname,
                             maxiter=10)
@@ -348,11 +350,26 @@ if __name__ == '__main__':
     db_df.to_csv(summary_path, index=False)
     print(db_df)
 
-    # register the images to the new map
-    # coord_path = os.path.join(obs_root, obsname, 'new_coord_maps', imgname+'.db')
-    # for imgname in ['SUPA01469800','SUPA01469810','SUPA01469820','SUPA01469830','SUPA01469840']:
+    # #register the images to the new map
+    # #try the N-A-L671 coord maps
+    # summary_path = os.path.join(obs_root, obsname, 'new_coord_maps', 'summary.csv')
+    # summary = pd.read_csv(summary_path)
+    # #get the index of the minimum rmse:
+
+    #this gets the transpath for the minimum rmse for each detector
+    # det_min = summary.loc[summary.groupby('detector').final_rmse.idxmin()][['transpath','detector', 'final_rmse']].set_index('detector')
+
+    # images = os.listdir(os.path.join(obs_root,obsname, 'no_bias'))
+
+    # for img in images:
+    #     imgname = os.path.splitext(img)[0]
     #     imga = ImageAlign(obs_root, obsname, imgname, thresh=100,
     #                     obj_minpix=50)
+        
+    #     mn = det_min.loc[imga.detector]
+    #     coord_path = mn.transpath
+
+    #     print(f'Detector: {imga.detector}, Coord_path: {os.path.basename(coord_path)}, final_rmse: {mn.final_rmse}')
     #     imga.register_image(coord_path)
 
     #     new_hdr = imga.new_fitsheader()
@@ -362,3 +379,6 @@ if __name__ == '__main__':
     #     outfile = os.path.join(obs_root, obsname, 'test_align', f'{imgname}_deg{polydeg:02d}.fits')
 
     #     phdu.writeto(outfile, overwrite=True)
+
+    #     print(f'Image: {imgname} registered')
+    #     print()
