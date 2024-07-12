@@ -111,7 +111,7 @@ class ImageAlign():
         #default parameters for coordmap creation:
 
         #override the defaults:
-        current_params = default_params
+        current_params = self.default_params
         bogus_kwargs = []
         for kw in kwargs:
             if kw in current_params:
@@ -170,7 +170,7 @@ class ImageAlign():
                   'initial_rmse': self.rmse[0], 'final_rmse':self.rmse[-1] }
 
 
-        return retval
+        return dict(retval, **current_params)
 
 
     def iterate_transform(self, current_params, catalog_xy, temp_dir, oldimg,
