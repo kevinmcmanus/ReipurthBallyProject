@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 import os, sys, tempfile
+from pathlib import Path
 
 
 import sep
@@ -30,21 +31,12 @@ from sklearn.linear_model import LinearRegression
 
 
 class ImageAlign():
-    def __init__(self, obs_root, objname, img_name,
-                 thresh=50,
-                 obj_minpix = 70, obj_maxpix=1000,
-                 catalog_maxmag = 18.5,
-                 maxiter = 5):
+    def __init__(self, obs_root, objname, img_name):
+
 
         self.dirs = obs_dirs(obs_root, objname)
 
-        #extraction and matching params
-        self.extraction_threshold = thresh
-        self.obj_minpix = obj_minpix
-        self.obj_maxpix = obj_maxpix
-        self.catalog_maxmag = catalog_maxmag
-        self.maxiter = maxiter
-        self.rmse_iter = np.full(maxiter, np.nan)
+
 
         img_path = os.path.join(self.dirs['no_bias'], img_name+'.fits')
         with fits.open(img_path) as f:
@@ -57,10 +49,22 @@ class ImageAlign():
         self.detector = self.fits_hdr['DETECTOR']
         
         #get the gaia catalog
-        self.catalog, self.catalog_xy = self.__load_gaia_catalog__(img_name)
+        self.catalog = self.__load_gaia_catalog__(img_name)
+
+        self.default_params = {'extraction_threshold':50, "obj_minpix":70, "obj_maxpix":1000,
+                    'poly_degree':3, 
+                    'catalog_maxmag':18.5, 'maxiter':5}
+        #fits name and comment for  the above
+        self.fits_names = {'coo-dt':{'fitsname':'DATA-COO', 'fitscomment':'date/time coo created'},
+                            'extraction_threshold':{'fitsname':'EXTHRSH', 'fitscomment': 'sep extraction threshold'},
+                           'obj_minpix':{'fitsname':'MINPIX', 'fitscomment':'(pixel) minimum object size'},
+                           'obj_maxpix':{'fitsname':'MINPIX', 'fitscomment':'(pixel) maximum object size'},
+                           'poly_degree':{'fitsname':'POLYDEG', 'fitscomment':'polynomial degree'},
+                           'catalog_maxmag':{'fitsname':'CATMAX', 'fitscomment':'maximum catalog magnitude'},
+                           'maxiter':{'fitsname':'MAXITER', 'fitscomment':'Maximum number iterations'}}
 
 
-    def __find_objects__(self, img):
+    def __find_objects__(self, current_params,  img):
 
         #img = image.byteswap().newbyteorder()
         bkg = sep.Background(img)
@@ -68,10 +72,11 @@ class ImageAlign():
 
         img_noback = img - bkg
         objects = sep.extract(img_noback, 
-                              thresh=self.extraction_threshold,
+                              thresh=current_params['extraction_threshold'],
                               err = bkg.globalrms)
         all_objects = pd.DataFrame(objects)
-        minpix = self.obj_minpix; maxpix = self.obj_maxpix
+        minpix = current_params['obj_minpix']
+        maxpix = current_params['obj_maxpix']
         objects_df = all_objects.query('npix >= @minpix and npix <= @maxpix').copy()
 
         return objects_df
@@ -79,14 +84,12 @@ class ImageAlign():
     def __load_gaia_catalog__(self, img_name):
         cat_path = os.path.join(self.dirs['xmatch_tables'], img_name+'.xml')
         try:
-            all_catalog = parse_single_table(cat_path).to_table()
-            catalog = all_catalog[all_catalog['phot_g_mean_mag'] <= self.catalog_maxmag]
-            catalog_xy = np.array([catalog['x'], catalog['y']]).T
+            catalog = parse_single_table(cat_path).to_table()
+
         except:
             catalog = None
-            catalog_xy = None
-        return  catalog, catalog_xy
-
+        return  catalog
+    
     def register_image(self, transpath):
 
         transforms = self.__gettransforms__(transpath)
@@ -101,9 +104,27 @@ class ImageAlign():
 
 
         self.registered_image = new_image
-        self.poly_degree = 9999
+        self.trans_path = transpath
 
-    def create_coordmap(self, trans_path, trans_root, poly_degree=3, maxiter=5):
+    def create_coordmap(self, trans_path, trans_root, **kwargs):
+
+        #default parameters for coordmap creation:
+
+        #override the defaults:
+        current_params = default_params
+        bogus_kwargs = []
+        for kw in kwargs:
+            if kw in current_params:
+                current_params[kw] = kwargs[kw]
+            else:
+                bogus_kwargs.append(kw)
+        if len(bogus_kwargs) != 0:
+            raise ValueError('Invalid arguements supplied: '+','.join(bogus_kwargs))
+        
+        #trim the catalog and get the xy pixel coords
+        catalog = self.catalog[self.catalog['phot_g_mean_mag'] <= current_params['catalog_maxmag']]
+        catalog_xy = np.array([catalog['x'], catalog['y']]).T
+
         #transpath - where to put the transform db
         self.NOBJ = None
         self.rmse = []
@@ -112,15 +133,22 @@ class ImageAlign():
 
         #blow away old map file
         if os.path.exists(trans_path):
-            os.remove(trans_path)
+            Path(trans_path).rename(trans_path+'.old')
+
+        #write the current params for posterity
+        paramstr = self.__paramstr__(current_params)
+        with open(trans_path,'a') as trans:
+            trans.write('# ' + paramstr +'\n\n')
 
         # do all the work in a temp dir
         with tempfile.TemporaryDirectory() as temp_dir:
-            for iter in range(maxiter):
+            for iter in range(current_params['maxiter']):
                 trans_name = f'{trans_root}_{iter:02d}'
                 new_db = os.path.join(temp_dir, trans_name+'.db')
-                new_image, new_rmse, nobj = self.iterate_transform(temp_dir, old_image,
-                        new_db, trans_name, poly_degree=poly_degree)
+                new_image, new_rmse, nobj = self.iterate_transform(current_params,
+                                catalog_xy,
+                                temp_dir, old_image,
+                                new_db, trans_name)
 
                 if new_rmse >= old_rmse:
                     break
@@ -135,37 +163,36 @@ class ImageAlign():
                         trans.write(temp.read())
 
         self.registered_image = new_image.byteswap().newbyteorder()
-        self.poly_degree = poly_degree
 
         #return database record with bunch o' stuff
         retval = {'transpath': trans_path, 'detector': self.detector,
                   'image_objects':self.NOBJ, 'catalog_objects':len(self.catalog),'niter': len(self.rmse),
-                  'initial_rmse': self.rmse[0], 'final_rmse':self.rmse[-1],
-                  'poly_degree':poly_degree}
+                  'initial_rmse': self.rmse[0], 'final_rmse':self.rmse[-1] }
+
 
         return retval
 
 
-    def iterate_transform(self, temp_dir, oldimg,
+    def iterate_transform(self, current_params, catalog_xy, temp_dir, oldimg,
                     trans_db, # pathname to the transform db
-                    trans_name, # name of the transform in the transform db.
-                    poly_degree=3):
+                    trans_name): # name of the transform in the transform db.
+
 
         #get the image objects
-        image_objects = self.__find_objects__(oldimg)
+        image_objects = self.__find_objects__(current_params, oldimg)
 
         # get the pixel coords for the objs in the image
         img_coords = image_objects[['x','y']].to_numpy()
 
         #match img_coords to self.catalog
-        closest_catalog_index = self.__find_closest_catalog__(img_coords)
+        closest_catalog_index = self.__find_closest_catalog__(catalog_xy, img_coords)
 
         # make coo db and transform image in temp directory:
   
         # create the new coo
-        rmse = self.__mkcoo__(temp_dir, trans_db, trans_name,
-                                    img_coords, self.catalog_xy[closest_catalog_index],
-                                    poly_degree=poly_degree)
+        rmse = self.__mkcoo__(current_params, temp_dir, trans_db, trans_name,
+                                    img_coords, catalog_xy[closest_catalog_index])
+
 
         # transform the image
         new_image = self.__geotran__(temp_dir, trans_db, trans_name, oldimg)
@@ -183,13 +210,19 @@ class ImageAlign():
         #      'BUNIT', 'PROP-ID', 'FILTER01', 'INSTRUME','DETECTOR', 'DET-ID']
         # for kw in fitskwlist:
         #     new_hdr.set(kw, self.fits_hdr[kw], self.fits_hdr.comments[kw])
-
+        
         new_hdr.set('DATA-TYP', 'REGISTERED', 'Registered against GAIA DR3')
 
-        new_hdr.set('POLYDEG', self.poly_degree, 'IRAF/GEOTRAN polynomial degree')
-        #new_hdr.set('NOBJ', self.NOBJ, 'Number of objects in image')
-        new_hdr.set('CATMAXM', self.catalog_maxmag, 'Maximum Catlog Magnitude')
-        new_hdr.set('OBJMINP', self.obj_minpix, '(pixels) Min Object Size')
+        #get the coo transform parameters (first line in the transform file)
+        new_hdr.set('COOFILE', self.trans_path,'path to coordinate map')
+
+        with open(self.trans_path) as tp:
+            paramstr = tp.readline().rstrip()[2:] # to get past the '# '
+        fits_names = self.fits_names
+        params = self.__str2params__(paramstr)
+        for param in params:
+            new_hdr.set(fits_names[param]['fitsname'], params[param], fits_names[param]['fitscomment'])
+    
 
         #time stamp:
         nt = Time.now()
@@ -208,11 +241,11 @@ class ImageAlign():
         return new_hdr
     
 
-    def __find_closest_catalog__(self, obj_xy):
+    def __find_closest_catalog__(self, catalog_xy, obj_xy):
 
         #pixel displacements for both x and y
-        x_disp = np.array([self.catalog_xy[:,0]-x for x in obj_xy[:,0]])
-        y_disp = np.array([self.catalog_xy[:,1]-y for y in obj_xy[:,1]])
+        x_disp = np.array([catalog_xy[:,0]-x for x in obj_xy[:,0]])
+        y_disp = np.array([catalog_xy[:,1]-y for y in obj_xy[:,1]])
 
         #total displacement array (image objects x catalog objects)
         disp = np.sqrt(x_disp**2 + y_disp**2)
@@ -222,12 +255,13 @@ class ImageAlign():
 
         return min_disp
 
-    def __mkcoo__(self, tempdir, trans_db, trans_name,
-                   img_coords, cat_coords, 
-                   poly_degree=3):
+    def __mkcoo__(self, current_params, tempdir, trans_db, trans_name,
+                   img_coords, cat_coords):
         """
         creates a iraf coo database
         """
+        poly_degree = current_params['poly_degree']
+
         NAXIS1 = self.fits_hdr['NAXIS1']
         NAXIS2 = self.fits_hdr['NAXIS2']
         
@@ -285,6 +319,19 @@ class ImageAlign():
                     transforms.append(tname)
         transforms.sort()
         return transforms
+    
+    def __paramstr__(self, params):
+        from datetime import datetime
+        tstr = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        pstr = ', '.join([f'coo-dt: {tstr}']+[f'{i[0]}:{str(i[1])}' for i in params.items()])
+        return pstr
+    
+    def __str2params__(self, paramstr):
+        params = {}
+        for val in paramstr.split(', '):
+            kv = val.split(':')
+            params[kv[0]] = kv[1]
+        return params
 
 def pairs2reg(src, obj_hat, dst, reg_path, nameroot='Star'):
     reghdr =[ '# Region file format: DS9 version 4.1',
@@ -331,54 +378,52 @@ if __name__ == '__main__':
     #     # 
     # # #     #
 
-    db_recs = []
-    images = os.listdir(os.path.join(obs_root,obsname, 'no_bias'))
-    for img in images:
-        imgname = os.path.splitext(img)[0]
-
-        imga = ImageAlign(obs_root, obsname, imgname, thresh=100,
-                        obj_minpix=50, obj_maxpix=50000)
-        trans_path = os.path.join(obs_root, obsname, 'new_coord_maps',imgname+'.db')
-        db_rec = imga.create_coordmap(trans_path, trans_root=imgname,
-                            maxiter=10)
-        db_recs.append(db_rec)
-        print(f'Image: {imgname}, {db_rec}')
-    
-    db_df = pd.DataFrame(db_recs)
-
-    summary_path = os.path.join(obs_root, obsname, 'new_coord_maps', 'summary.csv')
-    db_df.to_csv(summary_path, index=False)
-    print(db_df)
-
-    # #register the images to the new map
-    # #try the N-A-L671 coord maps
-    # summary_path = os.path.join(obs_root, obsname, 'new_coord_maps', 'summary.csv')
-    # summary = pd.read_csv(summary_path)
-    # #get the index of the minimum rmse:
-
-    #this gets the transpath for the minimum rmse for each detector
-    # det_min = summary.loc[summary.groupby('detector').final_rmse.idxmin()][['transpath','detector', 'final_rmse']].set_index('detector')
-
+    # db_recs = []
     # images = os.listdir(os.path.join(obs_root,obsname, 'no_bias'))
-
     # for img in images:
     #     imgname = os.path.splitext(img)[0]
-    #     imga = ImageAlign(obs_root, obsname, imgname, thresh=100,
-    #                     obj_minpix=50)
+
+    #     imga = ImageAlign(obs_root, obsname, imgname)
+    #     trans_path = os.path.join(obs_root, obsname, 'new_coord_maps',imgname+'.db')
+    #     db_rec = imga.create_coordmap(trans_path, trans_root=imgname,
+    #                         maxiter=10)
+    #     db_recs.append(db_rec)
+    #     print(f'Image: {imgname}, {db_rec}')
+    
+    # db_df = pd.DataFrame(db_recs)
+
+    # summary_path = os.path.join(obs_root, obsname, 'new_coord_maps', 'summary.csv')
+    # db_df.to_csv(summary_path, index=False)
+    # print(db_df)
+
+    #register the images to the new map
+    #try the N-A-L671 coord maps
+    summary_path = os.path.join(obs_root, obsname, 'new_coord_maps', 'summary.csv')
+    summary = pd.read_csv(summary_path)
+    #get the index of the minimum rmse:
+
+    # this gets the transpath for the minimum rmse for each detector
+    det_min = summary.loc[summary.groupby('detector').final_rmse.idxmin()][['transpath','detector', 'final_rmse']].set_index('detector')
+
+    images = os.listdir(os.path.join(obs_root,obsname, 'no_bias'))
+
+    for img in images:
+        imgname = os.path.splitext(img)[0]
+        imga = ImageAlign(obs_root, obsname, imgname)
         
-    #     mn = det_min.loc[imga.detector]
-    #     coord_path = mn.transpath
+        mn = det_min.loc[imga.detector]
+        coord_path = mn.transpath
 
-    #     print(f'Detector: {imga.detector}, Coord_path: {os.path.basename(coord_path)}, final_rmse: {mn.final_rmse}')
-    #     imga.register_image(coord_path)
+        print(f'Detector: {imga.detector}, Coord_path: {os.path.basename(coord_path)}, final_rmse: {mn.final_rmse}')
+        imga.register_image(coord_path)
 
-    #     new_hdr = imga.new_fitsheader()
+        new_hdr = imga.new_fitsheader()
         
-    #     phdu = fits.PrimaryHDU(data=imga.registered_image, header=new_hdr)
+        phdu = fits.PrimaryHDU(data=imga.registered_image, header=new_hdr)
 
-    #     outfile = os.path.join(obs_root, obsname, 'test_align', f'{imgname}_deg{polydeg:02d}.fits')
+        outfile = os.path.join(obs_root, obsname, 'test_align', f'{imgname}_deg{polydeg:02d}.fits')
 
-    #     phdu.writeto(outfile, overwrite=True)
+        phdu.writeto(outfile, overwrite=True)
 
-    #     print(f'Image: {imgname} registered')
-    #     print()
+        print(f'Image: {imgname} registered')
+        print()
