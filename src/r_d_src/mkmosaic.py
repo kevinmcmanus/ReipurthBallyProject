@@ -7,6 +7,10 @@ import tempfile, shutil
 import numpy as np
 import pandas as pd
 
+sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
+sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src/r_d_src'))
+
+from utils import obs_dirs, preserveold
 import warnings
 
 import argparse
@@ -104,6 +108,7 @@ if __name__ == '__main__':
             img_hdr['COMMENT'] = args.c
 
         phdu = fits.PrimaryHDU(data = img_data, header = img_hdr)
+        preserveold(args.o)
         phdu.writeto(args.o, overwrite=True)
 
         

@@ -23,7 +23,7 @@ sys.path.append(os.path.expanduser('~/repos/runawaysearch/src'))
 sys.path.append(os.path.expanduser('~/repos/runawaysearch/src/r_d_src'))
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 
-from utils import obs_dirs
+from utils import obs_dirs, preserveold
 from alignImage import ImageAlign
 
 
@@ -72,5 +72,8 @@ if __name__ == "__main__":
     db_df = pd.DataFrame(db_recs)
 
     summary_path = os.path.join(obs_root, args.filtername, 'new_coord_maps', 'summary.csv')
-    db_df.to_csv(summary_path, index=False)
+    preserveold(summary_path)
+    sumstr = '# '+imga.__paramstr__(params)+'\n' + db_df.to_csv(None, index=False)
+    with open(summary_path, 'w') as f:
+        f.write(sumstr)
     print(db_df) 

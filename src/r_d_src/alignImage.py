@@ -58,7 +58,7 @@ class ImageAlign():
         self.fits_names = {'coo-dt':{'fitsname':'DATA-COO', 'fitscomment':'date/time coo created'},
                             'extraction_threshold':{'fitsname':'EXTHRSH', 'fitscomment': 'sep extraction threshold'},
                            'obj_minpix':{'fitsname':'MINPIX', 'fitscomment':'(pixel) minimum object size'},
-                           'obj_maxpix':{'fitsname':'MINPIX', 'fitscomment':'(pixel) maximum object size'},
+                           'obj_maxpix':{'fitsname':'MAXPIX', 'fitscomment':'(pixel) maximum object size'},
                            'poly_degree':{'fitsname':'POLYDEG', 'fitscomment':'polynomial degree'},
                            'catalog_maxmag':{'fitsname':'CATMAX', 'fitscomment':'maximum catalog magnitude'},
                            'maxiter':{'fitsname':'MAXITER', 'fitscomment':'Maximum number iterations'}}
@@ -214,7 +214,7 @@ class ImageAlign():
         new_hdr.set('DATA-TYP', 'REGISTERED', 'Registered against GAIA DR3')
 
         #get the coo transform parameters (first line in the transform file)
-        new_hdr.set('COOFILE', self.trans_path,'path to coordinate map')
+        new_hdr.set('COOFILE', os.path.basename(self.trans_path),'path to coordinate map')
 
         with open(self.trans_path) as tp:
             paramstr = tp.readline().rstrip()[2:] # to get past the '# '
@@ -329,7 +329,7 @@ class ImageAlign():
     def __str2params__(self, paramstr):
         params = {}
         for val in paramstr.split(', '):
-            kv = val.split(':')
+            kv = val.split(':', maxsplit=1)
             params[kv[0]] = kv[1]
         return params
 

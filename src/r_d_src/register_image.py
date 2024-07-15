@@ -5,7 +5,10 @@ from astropy.wcs import WCS
 from astropy.time import Time
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
+import astroalign as aa
+import sep
 import numpy as np
+import pandas as pd
 
 import warnings
 from matplotlib import pyplot as plt
@@ -14,92 +17,61 @@ from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
 from ccdproc import ImageFileCollection
 
-import astroalign as aa
-import sep
-
-
 import argparse
 
 sys.path.append(os.path.expanduser('~/repos/runawaysearch/src'))
+sys.path.append(os.path.expanduser('~/repos/runawaysearch/src/r_d_src'))
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 
 from utils import obs_dirs
-
-def remove_oscan(hdr, data):
-    #four channels
-    nchan=4
-    eff_regions = np.array([[[hdr[f'S_EFMN{i}{ax}'], hdr[f'S_EFMx{i}{ax}'] ]\
-                             for i in range(1,nchan+1)] for ax in [1,2]])
-
-    #effective columns are page 0 of the above array
-    #effective rows are page 1 of the above array
-    eff_cols = np.concatenate([np.arange(eff_regions[0,c,0],eff_regions[0,c,1]+1)for c in range(nchan)])
-    eff_rows = np.concatenate([np.arange(eff_regions[1,c,0],eff_regions[1,c,1]+1)for c in range(nchan)])
-    
-    #unique-ify and subtract 1 for python indexing
-    # relying on np.unique to return array in sorted order
-    eff_rows = np.unique(eff_rows)-1
-    eff_cols = np.unique(eff_cols)-1
-
-    no_oscan = np.array([data[row][eff_cols] for row in eff_rows])
-
-    return no_oscan
+from alignImage import ImageAlign
 
 if __name__ == "__main__":
 
-    sep.set_extract_pixstack(5000000)
-    sep.set_sub_object_limit(10240)
 
-    parser = argparse.ArgumentParser(description='registers an image against a false image')
+    parser = argparse.ArgumentParser(description='registers image using best coormap for detector file')
     parser.add_argument('objname', help='name of this object')
+    parser.add_argument('filtername', help='name of this filter')
+    parser.add_argument('--rootdir',help='observation data directory', default='/home/kevin/Documents')
 
-    parser.add_argument('--rootdir',help='observation data directory', default='./data')
-
+    parser.add_argument('--regdir',help='destination directory for regisered images', default='registered_image')
+    parser.add_argument('--map', help='alternate map file', default=None)
 
     args = parser.parse_args()
+    
+    obs_root = os.path.join(args.rootdir, args.objname) # e.g. /home/kevin/Pelican
+    filter_name = args.filtername
 
-    obs_root = args.rootdir
-    objname = args.objname
+    if args.map is None:
+        summary_path = os.path.join(obs_root, args.filtername, 'new_coord_maps', 'summary.csv')
+    else:
+        summary_path = args.map
 
-    dirs = obs_dirs(obs_root, objname)
+    summary = pd.read_csv(summary_path, comment='#')
+    #get the index of the minimum rmse:
 
-    im_collection =  ImageFileCollection(dirs['no_bias'])
+    # this gets the transpath for the minimum rmse for each detector
+    det_min = summary.loc[summary.groupby('detector').final_rmse.idxmin()][['transpath','detector', 'final_rmse']].set_index('detector')
 
-    for im in im_collection.files:
+    images = os.listdir(os.path.join(obs_root, filter_name, 'no_bias'))
 
-        print('\n')
-        print(f'------------------- {im} ------------------')
+    for img in images:
+        imgname = os.path.splitext(img)[0]
+        imga = ImageAlign(obs_root, filter_name, imgname)
         
-        #get the image
-        image_path = os.path.join(im_collection.location, im)
-        with fits.open(image_path) as f:
-            img_hdr = f[0].header.copy()
-            img_data = f[0].data.copy()
+        mn = det_min.loc[imga.detector]
+        coord_path = mn.transpath
 
-        #take out the overscan
-        img_data = remove_oscan(img_hdr, img_data)
+        print(f'Detector: {imga.detector}, Coord_path: {os.path.basename(coord_path)}, final_rmse: {mn.final_rmse}')
+        imga.register_image(coord_path)
 
-        #false image header and data
-        false_image_path = os.path.join(dirs['false_image'],im)
-        with fits.open(false_image_path) as f:
-            false_hdr = f[0].header.copy()
-            false_data = f[0].data.copy()
-
-        try:
-            registered_image, footprint = aa.register(img_data, false_data, fill_value=np.nan)
-
-
-        except Exception as err:
-            print(err)
-            continue
-        else:
-            # use the wcs from the false image for the registered image header
-            wcs = WCS(false_hdr)
-            new_hdr = wcs.to_header()
-
-            #make a fits file
-            phdu = fits.PrimaryHDU(data = registered_image, header=new_hdr)
-
-            registered_image_path = os.path.join(dirs['registered_image'],im)
-            phdu.writeto(registered_image_path, overwrite=True)
+        new_hdr = imga.new_fitsheader()
         
+        phdu = fits.PrimaryHDU(data=imga.registered_image, header=new_hdr)
+
+        outfile = os.path.join(obs_root, filter_name, args.regdir, f'{imgname}.fits')
+
+        phdu.writeto(outfile, overwrite=True)
+
+        print(f'Image: {imgname} registered')
+        print()
