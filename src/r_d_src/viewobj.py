@@ -3,13 +3,13 @@ from tkinter.filedialog import askopenfilename
 import os
 
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button, Slider
+from matplotlib.widgets import Button, Slider, TextBox
 import numpy as np
 import pandas as pd
 
 from astropy.io import fits
 import astropy.visualization as viz
-from astropy.visualization import imshow_norm, MinMaxInterval, LogStretch,PercentileInterval
+from astropy.visualization import imshow_norm, MinMaxInterval, LogStretch,PercentileInterval, ImageNormalize
 from astropy.io.votable import parse_single_table
 from astropy.wcs import WCS
 import astropy.units as u
@@ -50,6 +50,7 @@ parser.add_argument('--thresh', default="50", help='extraction threshold', type=
 parser.add_argument('--minpix', default="70", help='minimum object size (pixels)',type=int)
 parser.add_argument('--maxpix', default="1000", help='maximum object size (pixels)', type=int)
 parser.add_argument('--catmax', default="18.5", help='maximum catalog magnitude to include', type=float)
+parser.add_argument('--log',    default="50", help='contrast parameter', type=float)
 
 
 
@@ -80,26 +81,31 @@ thresh = args.thresh
 maxmag = args.catmax
 minpix = args.minpix
 maxpix = args.maxpix
+loginit = args.log
+catval = {'maxmag':maxmag}
 
 wcs = WCS(hdr)
 objects_df = find_objects(img_bs, extraction_threshold=thresh, obj_minpix=minpix, obj_maxpix=maxpix)
-cat_objs = catalog[catalog['phot_g_mean_mag']<= maxmag]
+cat_objs = catalog[catalog['phot_g_mean_mag']<= catval['maxmag']]
 
 
-title = f'{os.path.basename(filename)}, nobj: {len(objects_df)}, thresh: {thresh}'
+title = f'{os.path.basename(filename)}, nobj: {len(objects_df)}, thresh: {thresh}' \
+        '  cat max: {}'.format(catval['maxmag'])
 
 fig = plt.figure(figsize=(12,12))
 #viz.simple_norm(img.data, min_percent=1, max_percent=99.5)+
 
+norm = ImageNormalize(img,interval=PercentileInterval(99.5), stretch=LogStretch(loginit))
+
 ax = fig.add_subplot() 
-im, norm = imshow_norm(img, ax, origin='lower', cmap='gray',
-                    interval=PercentileInterval(99.5), stretch=LogStretch(50))
+
+im = ax.imshow(img, origin='lower', cmap='gray', norm=norm)
 obj_scat, = ax.plot(objects_df.x, objects_df.y, linestyle='None', marker='o', markerfacecolor='None', markeredgecolor='red')
 cat_scat, = ax.plot(cat_objs['x'], cat_objs['y'],linestyle='None', marker='o', markerfacecolor='orange', markeredgecolor='orange', markersize=5, alpha=1.0)
 ax.set_title(title)
 
 #make room for slider
-fig.subplots_adjust(bottom=0.25, left=0.25)
+fig.subplots_adjust(bottom=0.25, left=0.35)
 thresh_ax = fig.add_axes([0.25,0.1,0.65,0.03])
 thresh_slider = Slider(
     ax=thresh_ax,
@@ -131,17 +137,26 @@ maxpix_slider = Slider(
 
 )
 
-cat_ax = fig.add_axes([0.1, 0.25, 0.0225, 0.63])
-cat_slider = Slider(
-    ax=cat_ax,
-    label='cat max mag',
-    valmin=0,
-    valmax=25,
-    valstep = 0.25,
-    valinit=maxmag,
+# cat_ax = fig.add_axes([0.05, 0.25, 0.0225, 0.63])
+# cat_slider = Slider(
+#     ax=cat_ax,
+#     label='cat max mag',
+#     valmin=0,
+#     valmax=25,
+#     valstep = 0.25,
+#     valinit=maxmag,
+#     orientation='vertical'
+# )
+log_ax = fig.add_axes([0.15, 0.25, 0.0225, 0.63])
+log_slider = Slider(
+    ax=log_ax,
+    label='Contrast',
+    valmin=50.0,
+    valmax= 1500.0,
+    valstep = 50.0,
+    valinit=loginit,
     orientation='vertical'
 )
-
 
 
 def update(val):
@@ -153,26 +168,42 @@ def update(val):
     obj_scat.set_ydata(objects_df.y)
 
     # catalog objects
-    cat_objs = catalog[catalog['phot_g_mean_mag']<= cat_slider.val]
+    cat_objs = catalog[catalog['phot_g_mean_mag']<= catval['maxmag']]
     cat_scat.set_xdata(cat_objs['x'])
     cat_scat.set_ydata(cat_objs['y'])
-    title = f'{os.path.basename(filename)}, nobj: {len(objects_df)}, thresh: {thresh_slider.val}'
+
+    title = f'{os.path.basename(filename)}, nobj: {len(objects_df)}, thresh: {thresh_slider.val}' \
+            ' catmax: {:.2f}'.format(catval['maxmag'])
     ax.set_title(title)
+
+    norm = ImageNormalize(img,interval=PercentileInterval(99.5), stretch=LogStretch(log_slider.val))
+    im.set_norm(norm)
+
     fig.canvas.draw_idle()
 
 thresh_slider.on_changed(update)
-cat_slider.on_changed(update)
+#cat_slider.on_changed(update)
 minpix_slider.on_changed(update)
 maxpix_slider.on_changed(update)
+log_slider.on_changed(update)
 
 # Create a `matplotlib.widgets.Button` to reset the sliders to initial values.
 resetax = fig.add_axes([0.8, 0.025, 0.1, 0.04])
 button = Button(resetax, 'Reset', hovercolor='0.975')
 
+catax = fig.add_axes([0.2, 0.025, 0.1, 0.04])
+catbox = TextBox(catax, 'cat max', initial= '{:.2f}'.format(catval['maxmag']) )
+def catupdate(val):
+    catval['maxmag'] = float(val)
+    update(val)
+
+catbox.on_submit(catupdate)
+
+
 
 def reset(event):
     thresh_slider.reset()
-    cat_slider.reset()
+    #cat_slider.reset()
     minpix_slider.reset()
     maxpix_slider.reset()
 
