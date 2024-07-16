@@ -1,6 +1,6 @@
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
-import os
+import os, sys
 
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, Slider, TextBox
@@ -18,198 +18,143 @@ import sep
 
 import argparse
 
-def find_objects(img, extraction_threshold=100,
-                  obj_minpix=25, obj_maxpix=1000):
+sys.path.append(os.path.expanduser('~/repos/runawaysearch/src'))
+sys.path.append(os.path.expanduser('~/repos/runawaysearch/src/r_d_src'))
+sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 
-    #img = image.byteswap().newbyteorder()
-    bkg = sep.Background(img)
-    bkg_img = bkg.back() #2d array of background
-
-    img_noback = img - bkg
-    objects = sep.extract(img_noback, 
-                            thresh=extraction_threshold,
-                            err = bkg.globalrms)
-    all_objects = pd.DataFrame(objects)
-    lminpix = obj_minpix; lmaxpix = obj_maxpix
-    objects_df = all_objects.query('npix >= @lminpix and npix <= @lmaxpix').copy()
-
-    return objects_df
-
-#Tk().withdraw()
-#os.chdir('/home/kevin/Documents')
-# filename = askopenfilename()
-
-parser = argparse.ArgumentParser(description='Views initial coordinate mapping')
-parser.add_argument('objname', help='name of this object, e.g., Pelican')
-parser.add_argument('filtername', help='name of this filter, e.g., N-A-L656') 
-parser.add_argument('frameID',help='Frame (image) name in no_bias directory') # e.g. SUPA01469995.fits in the no_bias direcctory
-parser.add_argument('--rootdir',help='observation data directory', default='/home/kevin/Documents')
-
-# mapping parameters:
-parser.add_argument('--thresh', default="50", help='extraction threshold', type=float)
-parser.add_argument('--minpix', default="70", help='minimum object size (pixels)',type=int)
-parser.add_argument('--maxpix', default="1000", help='maximum object size (pixels)', type=int)
-parser.add_argument('--catmax', default="18.5", help='maximum catalog magnitude to include', type=float)
-parser.add_argument('--log',    default="50", help='contrast parameter', type=float)
-
-
-
-
-args = parser.parse_args()
-
-object = args.objname
-filter = args.filtername
-frame = args.frameID
-
-
-filename = os.path.join('/home/kevin/Documents', object, filter, 'no_bias', frame+'.fits' )
-cat_path = os.path.join('/home/kevin/Documents', object, filter, 'xmatch_tables', frame+'.xml')
-
-
-# https://docs.astropy.org/en/stable/visualization/wcsaxes/
-
-with fits.open(filename) as f:
-    img = f[0].data.copy()
-    hdr = f[0].header.copy()
-
-# get the catalog
-catalog = parse_single_table(cat_path).to_table()
-
-img_bs = img.byteswap().newbyteorder()
-
-thresh = args.thresh
-maxmag = args.catmax
-minpix = args.minpix
-maxpix = args.maxpix
-loginit = args.log
-catval = {'maxmag':maxmag}
-
-wcs = WCS(hdr)
-objects_df = find_objects(img_bs, extraction_threshold=thresh, obj_minpix=minpix, obj_maxpix=maxpix)
-cat_objs = catalog[catalog['phot_g_mean_mag']<= catval['maxmag']]
-
-
-title = f'{os.path.basename(filename)}, nobj: {len(objects_df)}, thresh: {thresh}' \
-        '  cat max: {}'.format(catval['maxmag'])
-
-fig = plt.figure(figsize=(12,12))
-#viz.simple_norm(img.data, min_percent=1, max_percent=99.5)+
-
-norm = ImageNormalize(img,interval=PercentileInterval(99.5), stretch=LogStretch(loginit))
-
-ax = fig.add_subplot() 
-
-im = ax.imshow(img, origin='lower', cmap='gray', norm=norm)
-obj_scat, = ax.plot(objects_df.x, objects_df.y, linestyle='None', marker='o', markerfacecolor='None', markeredgecolor='red')
-cat_scat, = ax.plot(cat_objs['x'], cat_objs['y'],linestyle='None', marker='o', markerfacecolor='orange', markeredgecolor='orange', markersize=5, alpha=1.0)
-ax.set_title(title)
-
-#make room for slider
-fig.subplots_adjust(bottom=0.25, left=0.35)
-thresh_ax = fig.add_axes([0.25,0.1,0.65,0.03])
-thresh_slider = Slider(
-    ax=thresh_ax,
-    label='threshold',
-    valmin=2,
-    valmax=200,
-    valstep = 0.5,
-    valinit=thresh
-
-)
-minpix_ax = fig.add_axes([0.25,0.15,0.65,0.03])
-minpix_slider = Slider(
-    ax=minpix_ax,
-    label='minpix',
-    valmin=2,
-    valmax=1000,
-    valstep = 10.0,
-    valinit=minpix
-
-)
-maxpix_ax = fig.add_axes([0.25,0.2,0.65,0.03])
-maxpix_slider = Slider(
-    ax=maxpix_ax,
-    label='maxpix',
-    valmin=100,
-    valmax=5000,
-    valstep = 100,
-    valinit=maxpix
-
-)
-
-# cat_ax = fig.add_axes([0.05, 0.25, 0.0225, 0.63])
-# cat_slider = Slider(
-#     ax=cat_ax,
-#     label='cat max mag',
-#     valmin=0,
-#     valmax=25,
-#     valstep = 0.25,
-#     valinit=maxmag,
-#     orientation='vertical'
-# )
-log_ax = fig.add_axes([0.15, 0.25, 0.0225, 0.63])
-log_slider = Slider(
-    ax=log_ax,
-    label='Contrast',
-    valmin=50.0,
-    valmax= 1500.0,
-    valstep = 50.0,
-    valinit=loginit,
-    orientation='vertical'
-)
-
+from utils import obs_dirs
+from alignImage import ImageAlign
 
 def update(val):
     # image objects
-    objects_df = find_objects(img_bs, extraction_threshold=thresh_slider.val,
-                               obj_minpix=minpix_slider.val,
-                               obj_maxpix=maxpix_slider.val)
+    objects_df = imga.__find_objects__(params, img_bs)
+    print(params)
+    print(len(objects_df))
     obj_scat.set_xdata(objects_df.x)
     obj_scat.set_ydata(objects_df.y)
 
     # catalog objects
-    cat_objs = catalog[catalog['phot_g_mean_mag']<= catval['maxmag']]
+    cat_objs = catalog[catalog['phot_g_mean_mag']<= params['catalog_maxmag']]
     cat_scat.set_xdata(cat_objs['x'])
     cat_scat.set_ydata(cat_objs['y'])
 
-    title = f'{os.path.basename(filename)}, nobj: {len(objects_df)}, thresh: {thresh_slider.val}' \
-            ' catmax: {:.2f}'.format(catval['maxmag'])
+    title = f'{frameID}, nobj: {len(objects_df)}' \
+            + ', thresh: {}'.format(params['extraction_threshold']) \
+            + ',  cat max: {}'.format(params['catalog_maxmag'])
     ax.set_title(title)
 
-    norm = ImageNormalize(img,interval=PercentileInterval(99.5), stretch=LogStretch(log_slider.val))
+    norm = ImageNormalize(imga.original_image,
+                          interval=PercentileInterval(99.5), stretch=LogStretch(log_slider.val))
     im.set_norm(norm)
 
     fig.canvas.draw_idle()
 
-thresh_slider.on_changed(update)
-#cat_slider.on_changed(update)
-minpix_slider.on_changed(update)
-maxpix_slider.on_changed(update)
-log_slider.on_changed(update)
+if __name__ == '__main__':
 
-# Create a `matplotlib.widgets.Button` to reset the sliders to initial values.
-resetax = fig.add_axes([0.8, 0.025, 0.1, 0.04])
-button = Button(resetax, 'Reset', hovercolor='0.975')
+    parser = argparse.ArgumentParser(description='Views initial coordinate mapping')
+    parser.add_argument('objname', help='name of this object, e.g., Pelican')
+    parser.add_argument('filtername', help='name of this filter, e.g., N-A-L656') 
+    parser.add_argument('frameID',help='Frame (image) name in no_bias directory') # e.g. SUPA01469995.fits in the no_bias direcctory
+    parser.add_argument('--rootdir',help='observation data directory', default='/home/kevin/Documents')
 
-catax = fig.add_axes([0.2, 0.025, 0.1, 0.04])
-catbox = TextBox(catax, 'cat max', initial= '{:.2f}'.format(catval['maxmag']) )
-def catupdate(val):
-    catval['maxmag'] = float(val)
-    update(val)
+    # mapping parameters:
+    parser.add_argument('--thresh', default="50", help='extraction threshold', type=float)
+    parser.add_argument('--minpix', default="70", help='minimum object size (pixels)',type=int)
+    parser.add_argument('--maxpix', default="1000", help='maximum object size (pixels)', type=int)
+    parser.add_argument('--catmax', default="18.5", help='maximum catalog magnitude to include', type=float)
+    parser.add_argument('--log',    default="500", help='contrast parameter', type=float)
+    #not using these quite yet
+    parser.add_argument('--poly_degree', default="3", help='polynomial degree', type=int)
+    parser.add_argument('--maxiter', default="10", help='maximum number of iterations', type=int)
 
-catbox.on_submit(catupdate)
+    args = parser.parse_args()
+
+    params = {'extraction_threshold':args.thresh, "obj_minpix":args.minpix, "obj_maxpix":args.maxpix,
+                    'poly_degree':args.poly_degree, 
+                    'catalog_maxmag':args.catmax, 'maxiter':args.maxiter}
+    loginit = args.log
+    frameID = args.frameID
+
+    obs_root = os.path.join(args.rootdir, args.objname)
+    imga = ImageAlign(obs_root, args.filtername, frameID)
 
 
+    # get the catalog and byteswapped image
+    catalog = imga.catalog #whole catalog
+    img_bs = imga.original_image.byteswap().newbyteorder()
 
-def reset(event):
-    thresh_slider.reset()
-    #cat_slider.reset()
-    minpix_slider.reset()
-    maxpix_slider.reset()
 
-button.on_clicked(reset)
+    objects_df = imga.__find_objects__(params, img_bs)
+    cat_objs = catalog[catalog['phot_g_mean_mag'] <= params['catalog_maxmag']]
 
-plt.show()
+    #inital title string
+    title = f'{frameID}, nobj: {len(objects_df)}' \
+            + ', thresh: {}'.format(params['extraction_threshold']) \
+            + ',  cat max: {}'.format(params['catalog_maxmag'])
 
-    # im, norm = imshow_norm(img, ax, origin='lower', cmap='gray',
-    #                     interval=PercentileInterval(99.5), stretch=LogStretch(val))
+    #image normalizer
+    norm = ImageNormalize(imga.original_image,
+                          interval=PercentileInterval(99.5),
+                          stretch=LogStretch(loginit))
+
+    # do the plot
+    fig = plt.figure(figsize=(12,12))
+    ax = fig.add_subplot()
+    #make room for slider
+    fig.subplots_adjust(bottom=0.25, left=0.35)
+
+    # add in all the text boxes:
+    cat_ax = fig.add_axes([0.1, 0.025, 0.1, 0.04])
+    catbox = TextBox(cat_ax, 'cat max', initial= '{:.2f}'.format(params['catalog_maxmag']) )
+    def catupdate(val):
+        params['catalog_maxmag'] = float(val)
+        update(val)
+    catbox.on_submit(catupdate)
+
+    thresh_ax = fig.add_axes([0.3, 0.025, 0.1, 0.04])
+    thresh_box = TextBox(thresh_ax,'Threshold', initial='{:.2f}'.format(params['extraction_threshold']))
+    def threshupdate(val):
+        params['extraction_threshold'] = float(val)
+        update(val)
+    thresh_box.on_submit(threshupdate)
+
+    minpix_ax = fig.add_axes([0.5, 0.025, 0.1, 0.04])
+    minpix_box = TextBox(minpix_ax,'Min Pixels', initial='{}'.format(params['obj_minpix']))
+    def minpixupdate(val):
+        params['obj_minpix'] = int(val)
+        update(val)
+    minpix_box.on_submit(minpixupdate)
+
+    maxpix_ax = fig.add_axes([0.7, 0.025, 0.1, 0.04])
+    maxpix_box = TextBox(maxpix_ax,'Max Pixels', initial='{}'.format(params['obj_maxpix']))
+    def maxpixupdate(val):
+        params['obj_maxpix'] = int(val)
+        update(val)
+    maxpix_box.on_submit(maxpixupdate)
+
+    resetax = fig.add_axes([0.8, 0.025, 0.1, 0.04])
+    button = Button(resetax, 'Reset', hovercolor='0.975')
+    def reset(event):
+        pass
+    button.on_clicked(reset)
+
+    log_ax = fig.add_axes([0.15, 0.25, 0.0225, 0.63])
+    log_slider = Slider(
+        ax=log_ax,
+        label='Contrast',
+        valmin=50.0,
+        valmax= 1500.0,
+        valstep = 50.0,
+        valinit=loginit,
+        orientation='vertical'
+    )
+    log_slider.on_changed(update)
+
+
+    im = ax.imshow(imga.original_image, origin='lower', cmap='gray', norm=norm)
+    obj_scat, = ax.plot(objects_df.x, objects_df.y, linestyle='None', marker='o', markerfacecolor='None', markeredgecolor='red')
+    cat_scat, = ax.plot(cat_objs['x'], cat_objs['y'],linestyle='None', marker='o', markerfacecolor='orange', markeredgecolor='orange', markersize=5, alpha=1.0)
+    ax.set_title(title)
+
+    plt.show()
+
