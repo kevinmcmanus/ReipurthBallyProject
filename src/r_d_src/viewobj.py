@@ -116,7 +116,7 @@ if __name__ == '__main__':
         update(val)
     maxpix_box.on_submit(maxpixupdate)
 
-    iterax = fig.add_axes([0.8, 0.025, 0.1, 0.04])
+    iterax = fig.add_axes([0.25,0.075, 0.2, 0.04])
     button = Button(iterax, 'Iterate', hovercolor='0.975')
     def iterate(event):
         imga.iterate(params)
@@ -124,6 +124,15 @@ if __name__ == '__main__':
         update(reset=False)
         
     button.on_clicked(iterate)
+
+    resetax = fig.add_axes([0.65,0.075, 0.2, 0.04])
+    reset_button = Button(resetax, 'Reset', hovercolor='0.975')
+    def reset(event):
+        imga.iter_reset(params)
+        im.set(data=imga.image_byte_swapped)
+        update(reset=False)
+        
+    reset_button.on_clicked(reset)
 
     log_ax = fig.add_axes([0.15, 0.25, 0.0225, 0.63])
     log_slider = Slider(
@@ -137,9 +146,10 @@ if __name__ == '__main__':
     )
     log_slider.on_changed(update)
 
-
-    im = ax.imshow(imga.image_byte_swapped, origin='lower', cmap='gray', norm=norm)
-    obj_scat, = ax.plot(imga.objects_df.x, imga.objects_df.y, linestyle='None', marker='o', markerfacecolor='None', markeredgecolor='red')
+    cmap = plt.get_cmap('gray').copy()
+    cmap.set_bad('blue')
+    im = ax.imshow(imga.image_byte_swapped, origin='lower', cmap=cmap, norm=norm)
+    obj_scat, = ax.plot(imga.objects_df.x, imga.objects_df.y, linestyle='None', marker='o', markerfacecolor='None', markeredgecolor='black')
     cat_scat, = ax.plot(imga.cat_objs['x'], imga.cat_objs['y'],linestyle='None', marker='o', markerfacecolor='orange', markeredgecolor='orange', markersize=5, alpha=1.0)
     ax.set_title(imga.iterstr())
 

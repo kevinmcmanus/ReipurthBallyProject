@@ -78,7 +78,7 @@ class ImageAlign():
         all_objects = pd.DataFrame(objects)
         minpix = current_params['obj_minpix']
         maxpix = current_params['obj_maxpix']
-        objects_df = all_objects.query('npix >= @minpix and npix <= @maxpix').copy()
+        objects_df = all_objects.query('npix >= @minpix and npix <= @maxpix and b/a >= 0.5').copy()
 
         return objects_df
     
@@ -256,7 +256,6 @@ class ImageAlign():
 
         if rmse:
             RMSE = np.sqrt(disp[np.arange(len(min_disp)),min_disp].mean())
-            print(f'RMSE: {RMSE}')
             return min_disp, RMSE
         else:
             return min_disp
@@ -307,12 +306,14 @@ class ImageAlign():
         #do the transform into an output file
         fits_out = os.path.join(tempdir, 'fits_out.fits')
         res = iraf.geotran(fits_in, fits_out, trans_db, trans_name,
-                        boundary='constant', constant=-32768, Stdout=1)
+                           boundary='nearest', fluxconserve='yes',
+                        # boundary='constant', constant=-32768,
+                          Stdout=1)
         
         # fix up the result:
         with fits.open(fits_out) as f:
             img = f[0].data.astype(np.float32)
-            img = np.where(img > 0, img, np.nan)
+            img = np.where(img > 100.0, img, np.nan)
 
         return img
     
@@ -332,12 +333,13 @@ class ImageAlign():
 
         with tempfile.TemporaryDirectory() as temp_dir:
         # create the new coo
-            rmse = self.__mkcoo__(current_params, temp_dir, 'coo.db', 'transform',
+            coo_db = os.path.join(temp_dir, 'coo.db')
+            rmse = self.__mkcoo__(current_params, temp_dir, coo_db, 'transform',
                                         self.objects_xy, self.cat_xy[self.closest_catalog_index])
 
 
             # transform the image
-            new_image = self.__geotran__(temp_dir, 'coo.db', 'transform', self.image_byte_swapped)
+            new_image = self.__geotran__(temp_dir, coo_db, 'transform', self.image_byte_swapped)
 
         self.image_byte_swapped = new_image
         self.objects_df = self.__find_objects__(current_params, new_image)
