@@ -31,25 +31,26 @@ from sklearn.linear_model import LinearRegression
 
 
 class ImageAlign():
-    def __init__(self, obs_root, objname, img_name):
+    def __init__(self, obs_root, objname, frameID):
 
 
         self.dirs = obs_dirs(obs_root, objname)
+        self.frameID = frameID
 
 
 
-        img_path = os.path.join(self.dirs['no_bias'], img_name+'.fits')
+        img_path = os.path.join(self.dirs['no_bias'], frameID+'.fits')
         with fits.open(img_path) as f:
             self.fits_hdr = f[0].header.copy()
             img = f[0].data.copy()
 
         self.original_image = img
-        #self.image_objects = self.__find_objects__(img)
+
         #make this a little easier to get at
         self.detector = self.fits_hdr['DETECTOR']
         
         #get the gaia catalog
-        self.catalog = self.__load_gaia_catalog__(img_name)
+        self.catalog = self.__load_gaia_catalog__(frameID)
 
         self.default_params = {'extraction_threshold':50, "obj_minpix":70, "obj_maxpix":1000,
                     'poly_degree':3, 
@@ -241,19 +242,24 @@ class ImageAlign():
         return new_hdr
     
 
-    def __find_closest_catalog__(self, catalog_xy, obj_xy):
+    def __find_closest_catalog__(self, catalog_xy, obj_xy,rmse=False):
 
         #pixel displacements for both x and y
         x_disp = np.array([catalog_xy[:,0]-x for x in obj_xy[:,0]])
         y_disp = np.array([catalog_xy[:,1]-y for y in obj_xy[:,1]])
 
-        #total displacement array (image objects x catalog objects)
-        disp = np.sqrt(x_disp**2 + y_disp**2)
+        #total squared displacement array (image objects x catalog objects)
+        disp = x_disp**2 + y_disp**2
 
         #index of minimum displacement for each image object
         min_disp = disp.argmin(axis=1) # 1 d array
 
-        return min_disp
+        if rmse:
+            RMSE = np.sqrt(disp[np.arange(len(min_disp)),min_disp].mean())
+            print(f'RMSE: {RMSE}')
+            return min_disp, RMSE
+        else:
+            return min_disp
 
     def __mkcoo__(self, current_params, tempdir, trans_db, trans_name,
                    img_coords, cat_coords):
@@ -309,6 +315,45 @@ class ImageAlign():
             img = np.where(img > 0, img, np.nan)
 
         return img
+    
+    def iter_reset(self, params):
+        self.image_byte_swapped = self.original_image.byteswap().newbyteorder()
+        self.objects_df = self.__find_objects__(params, self.image_byte_swapped)
+        self.objects_xy = self.objects_df[['x','y']].to_numpy()
+
+        #reduced catalog
+        self.cat_objs = self.catalog[self.catalog['phot_g_mean_mag'] <= params['catalog_maxmag']]
+        self.cat_xy = np.array([self.cat_objs['x'], self.cat_objs['y']]).T
+        self.closest_catalog_index, self.rmse = self.__find_closest_catalog__(
+            self.cat_xy, self.objects_xy, rmse=True)
+        self.iterno = 0
+
+    def iterate(self, current_params):
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+        # create the new coo
+            rmse = self.__mkcoo__(current_params, temp_dir, 'coo.db', 'transform',
+                                        self.objects_xy, self.cat_xy[self.closest_catalog_index])
+
+
+            # transform the image
+            new_image = self.__geotran__(temp_dir, 'coo.db', 'transform', self.image_byte_swapped)
+
+        self.image_byte_swapped = new_image
+        self.objects_df = self.__find_objects__(current_params, new_image)
+        self.objects_xy = self.objects_df[['x','y']].to_numpy()
+
+
+        #match img_coords to self.catalog
+        self.closest_catalog_index, self.rmse = self.__find_closest_catalog__(
+            self.cat_xy, self.objects_xy, rmse=True)
+        self.iterno += 1
+
+    def iterstr(self):
+        iterstr =f'{self.frameID}, nobj: {len(self.objects_df)}' \
+            +f', Iteration: {self.iterno}' \
+            + ', RMSE: {:.5f}'.format(self.rmse)
+        return iterstr
 
     def __gettransforms__(self, trans_path):
         transforms = []

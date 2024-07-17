@@ -25,23 +25,19 @@ sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 from utils import obs_dirs
 from alignImage import ImageAlign
 
-def update(val):
-    # image objects
-    objects_df = imga.__find_objects__(params, img_bs)
-    print(params)
-    print(len(objects_df))
-    obj_scat.set_xdata(objects_df.x)
-    obj_scat.set_ydata(objects_df.y)
+def update(reset=True):
+    # reset
+    if reset:
+        imga.iter_reset(params)
+
+    obj_scat.set_xdata(imga.objects_df.x)
+    obj_scat.set_ydata(imga.objects_df.y)
 
     # catalog objects
-    cat_objs = catalog[catalog['phot_g_mean_mag']<= params['catalog_maxmag']]
-    cat_scat.set_xdata(cat_objs['x'])
-    cat_scat.set_ydata(cat_objs['y'])
+    cat_scat.set_xdata(imga.cat_objs['x'])
+    cat_scat.set_ydata(imga.cat_objs['y'])
 
-    title = f'{frameID}, nobj: {len(objects_df)}' \
-            + ', thresh: {}'.format(params['extraction_threshold']) \
-            + ',  cat max: {}'.format(params['catalog_maxmag'])
-    ax.set_title(title)
+    ax.set_title(imga.iterstr())
 
     norm = ImageNormalize(imga.original_image,
                           interval=PercentileInterval(99.5), stretch=LogStretch(log_slider.val))
@@ -77,20 +73,8 @@ if __name__ == '__main__':
 
     obs_root = os.path.join(args.rootdir, args.objname)
     imga = ImageAlign(obs_root, args.filtername, frameID)
+    imga.iter_reset(params)
 
-
-    # get the catalog and byteswapped image
-    catalog = imga.catalog #whole catalog
-    img_bs = imga.original_image.byteswap().newbyteorder()
-
-
-    objects_df = imga.__find_objects__(params, img_bs)
-    cat_objs = catalog[catalog['phot_g_mean_mag'] <= params['catalog_maxmag']]
-
-    #inital title string
-    title = f'{frameID}, nobj: {len(objects_df)}' \
-            + ', thresh: {}'.format(params['extraction_threshold']) \
-            + ',  cat max: {}'.format(params['catalog_maxmag'])
 
     #image normalizer
     norm = ImageNormalize(imga.original_image,
@@ -132,11 +116,14 @@ if __name__ == '__main__':
         update(val)
     maxpix_box.on_submit(maxpixupdate)
 
-    resetax = fig.add_axes([0.8, 0.025, 0.1, 0.04])
-    button = Button(resetax, 'Reset', hovercolor='0.975')
-    def reset(event):
-        pass
-    button.on_clicked(reset)
+    iterax = fig.add_axes([0.8, 0.025, 0.1, 0.04])
+    button = Button(iterax, 'Iterate', hovercolor='0.975')
+    def iterate(event):
+        imga.iterate(params)
+        im.set(data=imga.image_byte_swapped)
+        update(reset=False)
+        
+    button.on_clicked(iterate)
 
     log_ax = fig.add_axes([0.15, 0.25, 0.0225, 0.63])
     log_slider = Slider(
@@ -151,10 +138,10 @@ if __name__ == '__main__':
     log_slider.on_changed(update)
 
 
-    im = ax.imshow(imga.original_image, origin='lower', cmap='gray', norm=norm)
-    obj_scat, = ax.plot(objects_df.x, objects_df.y, linestyle='None', marker='o', markerfacecolor='None', markeredgecolor='red')
-    cat_scat, = ax.plot(cat_objs['x'], cat_objs['y'],linestyle='None', marker='o', markerfacecolor='orange', markeredgecolor='orange', markersize=5, alpha=1.0)
-    ax.set_title(title)
+    im = ax.imshow(imga.image_byte_swapped, origin='lower', cmap='gray', norm=norm)
+    obj_scat, = ax.plot(imga.objects_df.x, imga.objects_df.y, linestyle='None', marker='o', markerfacecolor='None', markeredgecolor='red')
+    cat_scat, = ax.plot(imga.cat_objs['x'], imga.cat_objs['y'],linestyle='None', marker='o', markerfacecolor='orange', markeredgecolor='orange', markersize=5, alpha=1.0)
+    ax.set_title(imga.iterstr())
 
     plt.show()
 
