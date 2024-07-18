@@ -30,8 +30,8 @@ def update(reset=True):
     if reset:
         imga.iter_reset(params)
 
-    obj_scat.set_xdata(imga.objects_df.x)
-    obj_scat.set_ydata(imga.objects_df.y)
+    obj_scat.set_xdata(imga.objects_xy[:,0])
+    obj_scat.set_ydata(imga.objects_xy[:,1])
 
     # catalog objects
     cat_scat.set_xdata(imga.cat_objs['x'])
@@ -149,8 +149,8 @@ if __name__ == '__main__':
     cmap = plt.get_cmap('gray').copy()
     cmap.set_bad('blue')
     im = ax.imshow(imga.image_byte_swapped, origin='lower', cmap=cmap, norm=norm)
-    obj_scat, = ax.plot(imga.objects_df.x, imga.objects_df.y, linestyle='None', marker='o', markerfacecolor='None', markeredgecolor='black')
-    cat_scat, = ax.plot(imga.cat_objs['x'], imga.cat_objs['y'],linestyle='None', marker='o', markerfacecolor='orange', markeredgecolor='orange', markersize=5, alpha=1.0)
+    obj_scat, = ax.plot(imga.objects_xy[:,0], imga.objects_xy[:,1], linestyle='None', marker='o', markerfacecolor='None', markeredgecolor='black')
+    cat_scat, = ax.plot(imga.cat_objs['x'], imga.cat_objs['y'],linestyle='None', marker='o', markerfacecolor='orange', markeredgecolor='orange', markersize=3, alpha=1.0)
     ax.set_title(imga.iterstr())
 
     plt.show()
