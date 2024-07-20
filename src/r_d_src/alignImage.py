@@ -78,7 +78,8 @@ class ImageAlign():
         all_objects = pd.DataFrame(objects)
         minpix = current_params['obj_minpix']
         maxpix = current_params['obj_maxpix']
-        objects_df = all_objects.query('npix >= @minpix and npix <= @maxpix and b/a >= 0.5').copy()
+        objects_df = all_objects.query('npix >= @minpix and npix <= @maxpix and b/a >= 0.5').copy()  
+        #objects_df = all_objects.query('npix >= @minpix and npix <= @maxpix').copy()
         objects_xy = objects_df[['x','y']].to_numpy()
         return objects_xy
     
@@ -95,6 +96,7 @@ class ImageAlign():
 
         transforms = self.__gettransforms__(transpath)
         old_image = self.original_image
+        new_image = old_image # in case no tramsforms below.
         #temp working dir
         with tempfile.TemporaryDirectory() as tempdir:
                 # loop through the transforms
@@ -141,7 +143,7 @@ class ImageAlign():
         old_image = self.original_image.byteswap().newbyteorder()
         objects_xy = self.__find_objects__(current_params, old_image)
         #match the new object locations to the catalog
-        closest_catalog_index, old_rmse = self.__find_closest_catalog__(
+        closest_catalog_index, old_rmse, old_distance = self.__find_closest_catalog__(
             catalog_xy, objects_xy, rmse=True)
         self.NOBJ = len(objects_xy)
         self.rmse = [old_rmse]
@@ -153,15 +155,15 @@ class ImageAlign():
             # let the iterations begin.
             for iter in range(current_params['maxiter']):
 
-                # good enough?
-                if old_rmse <= 0.75:
-                    break
+                # # good enough?
+                # if old_rmse <= 0.75:
+                #     break
 
                 trans_name = f'{trans_root}_{iter:02d}'
                 new_db = os.path.join(temp_dir, trans_name+'.db')
 
                 #do the iteration
-                new_image,  objects_xy, closest_catalog_index, new_rmse = \
+                new_image,  objects_xy, closest_catalog_index, new_rmse, new_distance = \
                 self.iterate_transform(
                     temp_dir, new_db, trans_name, #where to do the transform
                     current_params, old_image, # parameters and image to be transformed
@@ -218,10 +220,10 @@ class ImageAlign():
        
 
         #match the new object locations to the catalog
-        closest_catalog_index, rmse = self.__find_closest_catalog__(
+        closest_catalog_index, rmse, distance = self.__find_closest_catalog__(
             catalog_xy, objects_xy, rmse=True)
 
-        return new_image,  objects_xy, closest_catalog_index, rmse
+        return new_image,  objects_xy, closest_catalog_index, rmse, distance
 
 
     def new_fitsheader(self, comment=None):
@@ -278,8 +280,9 @@ class ImageAlign():
         min_disp = disp.argmin(axis=1) # 1 d array
 
         if rmse:
-            RMSE = np.sqrt(disp[np.arange(len(min_disp)),min_disp].mean())
-            return min_disp, RMSE
+            min_dist = np.sqrt(disp[np.arange(len(min_disp)),min_disp])
+            RMSE = min_dist.mean()
+            return min_disp, RMSE, min_dist
         else:
             return min_disp
 
@@ -348,7 +351,7 @@ class ImageAlign():
         #reduced catalog
         self.cat_objs = self.catalog[self.catalog['phot_g_mean_mag'] <= params['catalog_maxmag']]
         self.cat_xy = np.array([self.cat_objs['x'], self.cat_objs['y']]).T
-        self.closest_catalog_index, self.rmse = self.__find_closest_catalog__(
+        self.closest_catalog_index, self.rmse, self.distance = self.__find_closest_catalog__(
             self.cat_xy, self.objects_xy, rmse=True)
         self.iterno = 0
 
@@ -368,7 +371,7 @@ class ImageAlign():
         self.objects_xy = self.__find_objects__(current_params, new_image)
 
         #match img_coords to self.catalog
-        self.closest_catalog_index, self.rmse = self.__find_closest_catalog__(
+        self.closest_catalog_index, self.rmse, self.distance = self.__find_closest_catalog__(
             self.cat_xy, self.objects_xy, rmse=True)
         self.iterno += 1
 

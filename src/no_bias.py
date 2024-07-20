@@ -111,25 +111,25 @@ def remove_oscan(hdr, data, bias=None):
     return new_hdr, no_oscan
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='sets up dir structure for observation')
-    parser.add_argument('objname', help='name of this object')
-    parser.add_argument('--rootdir',help='observation data directory', default='./data')
-    parser.add_argument('--srcdir',help='source directory')
+    parser = argparse.ArgumentParser(description='de-biases image frames')
+    parser.add_argument('srcdir', help='directory of image frames, eg. /home/Documents/Kevin/Pelican/all_fits')
+    parser.add_argument('filter', help='filter name, e.g. N-A-L671')
+    parser.add_argument('destdir', help='destination dir of debiased files, eg. /home/Documents/Kevin/Pelican/N-A-L671/no_bias')
+    parser.add_argument('--biasdir', help='directory of combined files, e.g. /home/Documents/Pelican/combined_bias', default=None)
+
+
 
     args = parser.parse_args()
 
-    obs_root = args.rootdir
-    objname = args.objname
-
-    dirs = obs_dirs(obs_root, objname)
-
-    obs_root = dirs.pop('obs_root')
-    
+    srcdir = args.srcdir
+    filter = args.filter
+    destdir = args.destdir
+    biasdir = args.biasdir
 
 
     # loop through the images and subtract the bias
-    im_collection = ImageFileCollection(dirs['raw_image'])
-    image_filter = {'DATA-TYP':'OBJECT'}
+    im_collection = ImageFileCollection(srcdir)
+    image_filter = {'DATA-TYP':'OBJECT', 'FILTER01': filter}
     im_files = im_collection.files_filtered(include_path=True, **image_filter)
 
     for imf in im_files:
@@ -143,9 +143,14 @@ if __name__ == '__main__':
 
             detector = hdr['DETECTOR']
             print(f'file: {os.path.basename(imf)}, detector: {detector}')
+            bias = None
+            if biasdir is not None:
+                biasfits = os.path.join(biasdir, detector+'.fits')
+                with fits.open(biasfits) as b:
+                    bias = b[0].data.astype(np.float32)
 
-            new_hdr, no_oscan = remove_oscan(hdr, data)
+            new_hdr, no_oscan = remove_oscan(hdr, data, bias=bias)
 
             phdu = fits.PrimaryHDU(data = no_oscan, header=new_hdr)
-            outfile = os.path.join(dirs['no_bias'], os.path.basename(imf))
+            outfile = os.path.join(destdir, os.path.basename(imf))
             phdu.writeto(outfile, overwrite=True)

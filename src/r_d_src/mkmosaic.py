@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
         projdir = os.path.join(tempdir, 'projected_image')
         os.mkdir(projdir)
-        rtn = mProjExec(imgdir, raw_image_tbl, hdrfile, projdir=projdir, quickMode=True)
+        rtn = mProjExec(imgdir, raw_image_tbl, hdrfile, projdir=projdir, quickMode=False)
         print(rtn)
         if rtn['status'] != '0': exit(int(rtn['status']))
 

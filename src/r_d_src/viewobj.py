@@ -4,6 +4,7 @@ import os, sys
 
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, Slider, TextBox
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 
@@ -30,12 +31,15 @@ def update(reset=True):
     if reset:
         imga.iter_reset(params)
 
-    obj_scat.set_xdata(imga.objects_xy[:,0])
-    obj_scat.set_ydata(imga.objects_xy[:,1])
+    # obj_scat.set_xdata(imga.objects_xy[:,0])
+    # obj_scat.set_ydata(imga.objects_xy[:,1])
+    obj_scat.set_offsets(imga.objects_xy)
+    obj_scat.set_facecolor(scat_mapper.to_rgba(imga.distance))
+    #obj_scat.set(facecolor=imga.distance)
 
     # catalog objects
-    cat_scat.set_xdata(imga.cat_objs['x'])
-    cat_scat.set_ydata(imga.cat_objs['y'])
+    cat_scat.set_offsets(imga.cat_xy)
+    #cat_scat.set_ydata(imga.cat_objs['y'])
 
     ax.set_title(imga.iterstr())
 
@@ -148,10 +152,16 @@ if __name__ == '__main__':
 
     cmap = plt.get_cmap('gray').copy()
     cmap.set_bad('blue')
+
+    scat_norm = mpl.colors.Normalize(vmin=0, vmax=imga.distance.max())
+    scat_mapper = mpl.cm.ScalarMappable(norm=scat_norm, cmap='plasma')
     im = ax.imshow(imga.image_byte_swapped, origin='lower', cmap=cmap, norm=norm)
-    obj_scat, = ax.plot(imga.objects_xy[:,0], imga.objects_xy[:,1], linestyle='None', marker='o', markerfacecolor='None', markeredgecolor='black')
-    cat_scat, = ax.plot(imga.cat_objs['x'], imga.cat_objs['y'],linestyle='None', marker='o', markerfacecolor='orange', markeredgecolor='orange', markersize=3, alpha=1.0)
+    obj_scat = ax.scatter(imga.objects_xy[:,0], imga.objects_xy[:,1], linestyle='None', marker='o',
+                           facecolor=scat_mapper.to_rgba(imga.distance), s=25)
+    cat_scat = ax.scatter(imga.cat_objs['x'], imga.cat_objs['y'],linestyle='None', marker='o', c='black', s=3, alpha=1.0)
     ax.set_title(imga.iterstr())
+
+    fig.colorbar(scat_mapper, ax=ax)
 
     plt.show()
 
