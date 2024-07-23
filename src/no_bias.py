@@ -41,13 +41,18 @@ def chan_slicer(chan_info, chan):
     # note the slicer applies to  numpy arrays, so x is columns and y is rows, also zero relative
 
     #overscan regions are the regions to the left or right of the effective region
+    # thus the rows of the overscan region need to match the rows of the effective
+    # region, because we want to take the median of  the oscan columns
+    # for each row of the effective region.
+    # The code in the line immediately below looks wrong but it is
+    # in fact correct.
     oscan = {'row': slice(chan_info['y_eff'][channel][0]-1, chan_info['y_eff'][channel][1]),
              'col': slice(chan_info['x_oscan'][channel][0]-1, chan_info['x_oscan'][channel][1])}
     eff   = {'row': slice(chan_info['y_eff'][channel][0]-1, chan_info['y_eff'][channel][1]),
              'col': slice(chan_info['x_eff'][channel][0]-1, chan_info['x_eff'][channel][1])}
     return {'oscan':oscan, 'eff':eff, 'gain': chan_info['gain'][channel]}
 
-def chan_rem_oscan(data, ci, chan, bias):
+def chan_rem_oscan(data, ci, chan, exptime, bias):
     cs = chan_slicer(ci, chan)
 
     # get the effective region for the channel
@@ -64,12 +69,13 @@ def chan_rem_oscan(data, ci, chan, bias):
         bias_reg = bias[cs['eff']['row'], cs['eff']['col']]
         eff_reg -= bias_reg
     
-    # convert to electrons
-    eff_reg *= cs['gain']
+    # convert to electrons per second
+    eff_reg *= cs['gain']/exptime
+
 
     return eff_reg
 
-def remove_oscan(hdr, data, bias=None):
+def remove_oscan(hdr, data, keepborder=False, bias=None):
 
     channel_info = get_channel_info(hdr)
 
@@ -78,20 +84,24 @@ def remove_oscan(hdr, data, bias=None):
     if channel_info['xflip']:
         channels = np.flip(channels)
 
+    exptime = hdr['EXPTIME']
+
     #remove the overscan from each region(channel) of the image array
-    eff_regs = [chan_rem_oscan(data, channel_info, chan, bias) for chan in channels]
+    eff_regs = [chan_rem_oscan(data, channel_info, chan, exptime,
+                               bias=bias) for chan in channels]
 
     no_oscan = np.hstack(eff_regs)
 
     #zap the border pixels
-    no_oscan[:8,:] = np.nan; no_oscan[-8:,:] = np.nan
-    no_oscan[:,:8] = np.nan; no_oscan[:,-8:] = np.nan
+    if not keepborder:
+        no_oscan[:8,:] = np.nan; no_oscan[-8:,:] = np.nan
+        no_oscan[:,:8] = np.nan; no_oscan[:,-8:] = np.nan
 
     #adjust the WCS in the header
     new_hdr = hdr.copy()
 
     #adjust the reference pixels
-    # this is what the SDFRED2 code does
+    # this is what the SDFRED2 code does~
     min_x = channel_info['x_eff'].min() - 1
     min_y = channel_info['y_eff'].min() - 1
     new_hdr['CRPIX1'] -= min_x
@@ -116,6 +126,8 @@ if __name__ == '__main__':
     parser.add_argument('filter', help='filter name, e.g. N-A-L671')
     parser.add_argument('destdir', help='destination dir of debiased files, eg. /home/Documents/Kevin/Pelican/N-A-L671/no_bias')
     parser.add_argument('--biasdir', help='directory of combined files, e.g. /home/Documents/Pelican/combined_bias', default=None)
+    parser.add_argument('--datatype', help='type of object to be debiased, e.g. OBJECT or DOMEFLAT', default='OBJECT')
+
 
 
 
@@ -125,11 +137,12 @@ if __name__ == '__main__':
     filter = args.filter
     destdir = args.destdir
     biasdir = args.biasdir
+    datatype = args.datatype
 
 
     # loop through the images and subtract the bias
     im_collection = ImageFileCollection(srcdir)
-    image_filter = {'DATA-TYP':'OBJECT', 'FILTER01': filter}
+    image_filter = {'DATA-TYP':datatype, 'FILTER01': filter}
     im_files = im_collection.files_filtered(include_path=True, **image_filter)
 
     for imf in im_files:

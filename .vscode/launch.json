@@ -4,15 +4,19 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
-            "name": "Python: False Image",
+            "name": "Python: No Bias",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args":["M8",
-                    "--rootdir", "~/Documents/M8data"
+            "args":["/home/kevin/Documents/Pelican/all_fits",
+                    "N-A-L671",
+                    "/home/kevin/Documents/Pelican/N-A-L671/xxx",
+                    "--flatdir", "/home/kevin/Documents/Pelican/N-A-L671/domeflat"
+                    //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
             ]
         },
         {
@@ -24,15 +28,17 @@
             "justMyCode": true
         },
         {
-            "name": "Python: CASJOBS",
+            "name": "Python: domeflat",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": [
-                "M8"
-            ],
+            "args":["/home/kevin/Documents/Pelican/all_fits",
+                    "N-A-L671",
+                    "/home/kevin/Documents/Pelican/N-A-L671/domeflat",
+                    //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
+            ]
             // ENVINRONMENT VARIABLES
             "env": {
                 "CASJOBS_USERID": "kevinmcmanus",

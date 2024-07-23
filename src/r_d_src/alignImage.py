@@ -92,10 +92,17 @@ class ImageAlign():
             catalog = None
         return  catalog
     
-    def register_image(self, transpath):
+    def register_image(self, transpath, flatdir):
 
         transforms = self.__gettransforms__(transpath)
         old_image = self.original_image
+
+        #apply the dome flat if needed
+        if flatdir is not None:
+            flatpath = os.path.join(flatdir, self.detector+'.fits')
+            with fits.open(flatpath) as f:
+                old_image /= f[0].data
+            
         new_image = old_image # in case no tramsforms below.
         #temp working dir
         with tempfile.TemporaryDirectory() as tempdir:
@@ -340,7 +347,7 @@ class ImageAlign():
         # fix up the result:
         with fits.open(fits_out) as f:
             img = f[0].data.astype(np.float32)
-            img = np.where(img > 100.0, img, np.nan)
+            img = np.where(img > 0, img, np.nan)
 
         return img
     
