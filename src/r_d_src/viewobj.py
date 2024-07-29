@@ -154,7 +154,7 @@ if __name__ == '__main__':
     cmap.set_bad('blue')
 
     scat_norm = mpl.colors.Normalize(vmin=0, vmax=imga.distance.max())
-    scat_mapper = mpl.cm.ScalarMappable(norm=scat_norm, cmap='plasma')
+    scat_mapper = mpl.cm.ScalarMappable(norm=scat_norm, cmap='plasma_r')
     im = ax.imshow(imga.image_byte_swapped, origin='lower', cmap=cmap, norm=norm)
     obj_scat = ax.scatter(imga.objects_xy[:,0], imga.objects_xy[:,1], linestyle='None', marker='o',
                            facecolor=scat_mapper.to_rgba(imga.distance), s=25)

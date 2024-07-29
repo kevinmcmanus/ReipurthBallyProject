@@ -7,15 +7,15 @@
 
         {
             "name": "Python: No Bias",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args":["/home/kevin/Documents/Pelican/all_fits",
-                    "N-A-L671",
-                    "/home/kevin/Documents/Pelican/N-A-L671/xxx",
-                    "--flatdir", "/home/kevin/Documents/Pelican/N-A-L671/domeflat"
+            "args":["/home/kevin/Documents/ZCMa-2014-12-18/all_fits",
+                    "N-A-L656",
+                    "/home/kevin/Documents/ZCMa-2014-12-18/N-A-L6565/no_bias_rdnoise",
+                    //"--flatdir", "/home/kevin/Documents/Pelican/N-A-L671/domeflat"
                     //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
             ]
         },

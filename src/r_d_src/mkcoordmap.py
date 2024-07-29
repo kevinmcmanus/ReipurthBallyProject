@@ -32,7 +32,7 @@ if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser(description='creates coordinate mapping file')
-    parser.add_argument('objname', help='name of this object')
+    parser.add_argument('objname', help='name of the object, e.g. Pelican')
     parser.add_argument('filtername', help='name of this filter')
     parser.add_argument('--rootdir',help='observation data directory', default='/home/kevin/Documents')
 
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     images = os.listdir(os.path.join(obs_root, args.filtername, 'no_bias'))
     for img in images:
         imgname = os.path.splitext(img)[0]
-
+        print(f'Image: {imgname} ...')
         imga = ImageAlign(obs_root, args.filtername, imgname)
         trans_path = os.path.join(obs_root, args.filtername, 'new_coord_maps',imgname+'.db')
 
@@ -76,4 +76,5 @@ if __name__ == "__main__":
     sumstr = '# '+imga.__paramstr__(params)+'\n' + db_df.to_csv(None, index=False)
     with open(summary_path, 'w') as f:
         f.write(sumstr)
-    print(db_df) 
+    print(db_df)
+    print('\n')

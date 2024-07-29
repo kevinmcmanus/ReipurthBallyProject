@@ -36,6 +36,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--regdir',help='destination directory for regisered images', default='registered_image')
     parser.add_argument('--map', help='alternate map file', default=None)
+    parser.add_argument('--flatdir', help='directory of dome flats', default=None)
 
     args = parser.parse_args()
     
@@ -46,6 +47,8 @@ if __name__ == "__main__":
         summary_path = os.path.join(obs_root, args.filtername, 'new_coord_maps', 'summary.csv')
     else:
         summary_path = args.map
+
+    flatdir = args.flatdir
 
     summary = pd.read_csv(summary_path, comment='#')
     #get the index of the minimum rmse:
@@ -63,7 +66,7 @@ if __name__ == "__main__":
         coord_path = mn.transpath
 
         print(f'Detector: {imga.detector}, Coord_path: {os.path.basename(coord_path)}, final_rmse: {mn.final_rmse}')
-        imga.register_image(coord_path)
+        imga.register_image(coord_path, flatdir=flatdir)
 
         new_hdr = imga.new_fitsheader()
         
@@ -73,5 +76,5 @@ if __name__ == "__main__":
 
         phdu.writeto(outfile, overwrite=True)
 
-        print(f'Image: {imgname} registered')
+        print(f'Image: {outfile} registered')
         print()

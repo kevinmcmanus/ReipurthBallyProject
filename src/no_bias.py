@@ -36,9 +36,12 @@ def get_channel_info(hdr):
     
     return  chan_info
 
-def chan_slicer(chan_info, chan):
+def chan_slicer(chan_info, chan, offset=0):
     channel = chan-1
     # note the slicer applies to  numpy arrays, so x is columns and y is rows, also zero relative
+
+    # offset applies only to oscan region; its purpose is to move in a few pixels
+    # to avoid border stars bleeding in
 
     #overscan regions are the regions to the left or right of the effective region
     # thus the rows of the overscan region need to match the rows of the effective
@@ -46,8 +49,8 @@ def chan_slicer(chan_info, chan):
     # for each row of the effective region.
     # The code in the line immediately below looks wrong but it is
     # in fact correct.
-    oscan = {'row': slice(chan_info['y_eff'][channel][0]-1, chan_info['y_eff'][channel][1]),
-             'col': slice(chan_info['x_oscan'][channel][0]-1, chan_info['x_oscan'][channel][1])}
+    oscan = {'row': slice(chan_info['y_eff'][channel][0]-1+offset, chan_info['y_eff'][channel][1]-offset),
+             'col': slice(chan_info['x_oscan'][channel][0]-1+offset, chan_info['x_oscan'][channel][1]-offset)}
     eff   = {'row': slice(chan_info['y_eff'][channel][0]-1, chan_info['y_eff'][channel][1]),
              'col': slice(chan_info['x_eff'][channel][0]-1, chan_info['x_eff'][channel][1])}
     return {'oscan':oscan, 'eff':eff, 'gain': chan_info['gain'][channel]}
@@ -75,6 +78,25 @@ def chan_rem_oscan(data, ci, chan, exptime, bias):
 
     return eff_reg
 
+def estimate_read_noise(data, chan_info, exptime):
+    """
+    estimates read noise as the standard deviation of the overscan regions
+    horizontally adjacent to the effective regions
+    """
+
+    #slices for rows and columns
+    nchan = 4
+    oscan_rows = [chan_slicer(chan_info,chan, offset=5)['oscan']['row'] for chan in range(nchan)]
+    oscan_cols = [chan_slicer(chan_info,chan, offset=5)['oscan']['col'] for chan in range(nchan)]
+    gains = [chan_slicer(chan_info,chan)['gain'] for chan in range(nchan)]
+
+    #put all the oscans together
+    oscan = np.hstack([data[oscan_rows[chan], oscan_cols[chan]]for chan in range(nchan)])
+
+    # return the standard deviation
+    return oscan.mean(), oscan.std()
+
+
 def remove_oscan(hdr, data, keepborder=False, bias=None):
 
     channel_info = get_channel_info(hdr)
@@ -97,6 +119,9 @@ def remove_oscan(hdr, data, keepborder=False, bias=None):
         no_oscan[:8,:] = np.nan; no_oscan[-8:,:] = np.nan
         no_oscan[:,:8] = np.nan; no_oscan[:,-8:] = np.nan
 
+    #estimate the read noise:
+    biasmean, rdnoise = estimate_read_noise(data, channel_info, exptime)
+
     #adjust the WCS in the header
     new_hdr = hdr.copy()
 
@@ -110,6 +135,9 @@ def remove_oscan(hdr, data, keepborder=False, bias=None):
     new_hdr['NAXIS2'], new_hdr['NAXIS1'] = no_oscan.shape
 
     new_hdr.set('DATA-TYP','DEBIAS','Bias and overscan removed')
+    new_hdr.set('BIASMEAN', biasmean, 'Mean bias from overscan (e- s^-1)')
+    new_hdr.set('RDNOISE', rdnoise, 'Est. read noise, (e- s^-1)')
+
     new_hdr['COMMENT'] = '--------------------------------------------------------'
     new_hdr['COMMENT'] = '-------------- WCS Adjustment --------------------------'
     new_hdr['COMMENT'] = '--------------------------------------------------------'
@@ -127,6 +155,7 @@ if __name__ == '__main__':
     parser.add_argument('destdir', help='destination dir of debiased files, eg. /home/Documents/Kevin/Pelican/N-A-L671/no_bias')
     parser.add_argument('--biasdir', help='directory of combined files, e.g. /home/Documents/Pelican/combined_bias', default=None)
     parser.add_argument('--datatype', help='type of object to be debiased, e.g. OBJECT or DOMEFLAT', default='OBJECT')
+    parser.add_argument('--keepborder', help='whether or not to keep orig frame border', action='store_true')
 
 
 
@@ -138,7 +167,7 @@ if __name__ == '__main__':
     destdir = args.destdir
     biasdir = args.biasdir
     datatype = args.datatype
-
+    keepborder = args.keepborder
 
     # loop through the images and subtract the bias
     im_collection = ImageFileCollection(srcdir)
@@ -162,7 +191,7 @@ if __name__ == '__main__':
                 with fits.open(biasfits) as b:
                     bias = b[0].data.astype(np.float32)
 
-            new_hdr, no_oscan = remove_oscan(hdr, data, bias=bias)
+            new_hdr, no_oscan = remove_oscan(hdr, data, bias=bias, keepborder=keepborder)
 
             phdu = fits.PrimaryHDU(data = no_oscan, header=new_hdr)
             outfile = os.path.join(destdir, os.path.basename(imf))

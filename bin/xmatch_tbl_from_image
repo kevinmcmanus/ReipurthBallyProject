@@ -1,0 +1,3 @@
+#! /bin/sh
+
+python $SRC/xmatch_tbl_from_image.py $*
