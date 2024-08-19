@@ -35,6 +35,7 @@ if __name__ == "__main__":
     parser.add_argument('objname', help='name of the object, e.g. Pelican')
     parser.add_argument('filtername', help='name of this filter')
     parser.add_argument('--rootdir',help='observation data directory', default='/home/kevin/Documents')
+    parser.add_argument('--flatdir', help='directory of dome flats') #no default
 
     # mapping parameters:
     parser.add_argument('--thresh', default="50", help='extraction threshold', type=float)
@@ -43,13 +44,14 @@ if __name__ == "__main__":
     parser.add_argument('--degree', default="3", help='transform polynomial degree', type=int)
     parser.add_argument('--catmax', default="18.5", help='maximum catalog magnitude to include', type=float)
     parser.add_argument('--maxiter', default="10", help='maximum number of iterations', type=int)
+    parser.add_argument('--apply_pm',  help='apply proper motion to catalog', action='store_true')
 
 
 
     args = parser.parse_args()
 
     params = {'extraction_threshold':args.thresh, "obj_minpix":args.minpix, "obj_maxpix":args.maxpix,
-                    'poly_degree':args.degree, 
+                    'poly_degree':args.degree, 'flatdir':args.flatdir, 'apply_pm':args.apply_pm,
                     'catalog_maxmag':args.catmax, 'maxiter':args.maxiter}
     
     print(params)
@@ -64,7 +66,7 @@ if __name__ == "__main__":
         imga = ImageAlign(obs_root, args.filtername, imgname)
         trans_path = os.path.join(obs_root, args.filtername, 'new_coord_maps',imgname+'.db')
 
-        db_rec = imga.create_coordmap(trans_path, trans_root=imgname, **params)
+        db_rec = imga.create_coordmap(trans_path, trans_root=imgname,**params)
         
         db_recs.append(db_rec)
         print(f'Image: {imgname}, {db_rec}')

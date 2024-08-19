@@ -75,16 +75,17 @@ def get_gaia_data(imgpath, xmatch_file):
                     distance = 1000.0/np.abs(xmatch_tbl['parallax']) * u.pc,
                     obstime = t_gaia).fk5
     
-    #let's see what happens if we don't bother with this
-        # #move the positions to the obs time and reframe to FK5
-        # coords = coords_gaia.apply_space_motion(new_obstime=t_obs).fk5
-        # xmatch_tbl['RA_OBS'] = coords.ra 
-        # xmatch_tbl['DEC_OBS'] = coords.dec
 
-    #add pixel position for each coord (zero-relative, ie array indexes)
-    x,y = wcs.world_to_pixel_values(coords_gaia.ra, coords_gaia.dec)
-    xmatch_tbl['x'] = x
-    xmatch_tbl['y'] = y
+    #move the positions to the obs time and reframe to FK5
+    coords = coords_gaia.apply_space_motion(new_obstime=t_obs).fk5
+    xmatch_tbl['RA_OBSDATE'] = coords.ra 
+    xmatch_tbl['DEC_OBSDATE'] = coords.dec
+
+    # moved to align_image.create_coordmap
+        # #add pixel position for each coord (zero-relative, ie array indexes)
+        # x,y = wcs.world_to_pixel_values(coords_gaia.ra, coords_gaia.dec)
+        # xmatch_tbl['x'] = x
+        # xmatch_tbl['y'] = y
     xmatch_tbl['GaiaId'] = [f'gaia_{i:04d}' for i in range(len(xmatch_tbl))]
 
 

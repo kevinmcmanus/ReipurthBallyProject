@@ -15,6 +15,7 @@
             "args":["/home/kevin/Documents/ZCMa-2014-12-18/all_fits",
                     "N-A-L656",
                     "/home/kevin/Documents/ZCMa-2014-12-18/N-A-L6565/no_bias_rdnoise",
+                    "--rmcosmic",
                     //"--flatdir", "/home/kevin/Documents/Pelican/N-A-L671/domeflat"
                     //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
             ]
@@ -39,6 +40,20 @@
                     "/home/kevin/Documents/Pelican/N-A-L671/domeflat",
                     //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
             ]
+
+        },
+        {
+            "name": "Python: mkmosaic",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args":["/home/kevin/Documents/ZCMa-2014-12-18/N-A-L656/registered_image",
+                    "--o", "junk.fits",
+                    "--bkcor"
+                    //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
+            ],
             // ENVINRONMENT VARIABLES
             "env": {
                 "CASJOBS_USERID": "kevinmcmanus",

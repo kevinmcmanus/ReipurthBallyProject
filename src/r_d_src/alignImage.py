@@ -31,7 +31,7 @@ from sklearn.linear_model import LinearRegression
 
 
 class ImageAlign():
-    def __init__(self, obs_root, objname, frameID):
+    def __init__(self, obs_root, objname, frameID, imgdir='no_bias'):
 
 
         self.dirs = obs_dirs(obs_root, objname)
@@ -39,7 +39,7 @@ class ImageAlign():
 
 
 
-        img_path = os.path.join(self.dirs['no_bias'], frameID+'.fits')
+        img_path = os.path.join(imgdir, frameID+'.fits')
         with fits.open(img_path) as f:
             self.fits_hdr = f[0].header.copy()
             img = f[0].data.copy()
@@ -53,7 +53,7 @@ class ImageAlign():
         self.catalog = self.__load_gaia_catalog__(frameID)
 
         self.default_params = {'extraction_threshold':50, "obj_minpix":70, "obj_maxpix":1000,
-                    'poly_degree':3, 
+                    'poly_degree':3, 'apply_pm':False, 'flatdir':None,
                     'catalog_maxmag':18.5, 'maxiter':5}
         #fits name and comment for  the above
         self.fits_names = {'coo-dt':{'fitsname':'DATA-COO', 'fitscomment':'date/time coo created'},
@@ -62,7 +62,9 @@ class ImageAlign():
                            'obj_maxpix':{'fitsname':'MAXPIX', 'fitscomment':'(pixel) maximum object size'},
                            'poly_degree':{'fitsname':'POLYDEG', 'fitscomment':'polynomial degree'},
                            'catalog_maxmag':{'fitsname':'CATMAX', 'fitscomment':'maximum catalog magnitude'},
-                           'maxiter':{'fitsname':'MAXITER', 'fitscomment':'Maximum number iterations'}}
+                           'maxiter':{'fitsname':'MAXITER', 'fitscomment':'Maximum number iterations'},
+                           'apply_pm':{'fitsname':'APPLY-PM', 'fitscomment':'Proper motion applied'},
+                           'flatdir': {'fitsname':'DMFLTDIR', 'fitscomment': 'directory of domeflats'}}
 
 
     def __find_objects__(self, current_params,  img):
@@ -133,7 +135,13 @@ class ImageAlign():
         
         #trim the catalog and get the xy pixel coords
         catalog = self.catalog[self.catalog['phot_g_mean_mag'] <= current_params['catalog_maxmag']]
-        catalog_xy = np.array([catalog['x'], catalog['y']]).T
+        wcs = WCS(self.fits_hdr)
+        if current_params['apply_pm']:
+            x,y = wcs.world_to_pixel_values(catalog['ra'], catalog['dec'])
+        else:
+            x,y = wcs.world_to_pixel_values(catalog['RA_OBSDATE'], catalog['DEC_OBSDATE'])
+
+        catalog_xy = np.array([x, y]).T
 
 
         #blow away old map file
@@ -146,8 +154,15 @@ class ImageAlign():
             trans.write('# ' + paramstr +'\n\n')
 
         #initialize for iterations:
-
-        old_image = self.original_image.byteswap().newbyteorder()
+        if current_params['flatdir'] is None:
+            old_image = self.original_image.byteswap().newbyteorder()
+        else:
+            #flat correct the orig image
+            flatpath = os.path.join(current_params['flatdir'], self.detector+'.fits')
+            with fits.open(flatpath) as flat:
+                old_image = self.original_image/flat[0].data
+                #old_image = old_image.byteswap().newbyteorder()
+        
         objects_xy = self.__find_objects__(current_params, old_image)
         #match the new object locations to the catalog
         closest_catalog_index, old_rmse, old_distance = self.__find_closest_catalog__(
@@ -325,7 +340,7 @@ class ImageAlign():
         x_resid = res_df.x_ref - res_df.x_fit
         y_resid = res_df.y_ref - res_df.y_fit
         rmse = np.sqrt((x_resid**2 + y_resid**2).mean())
-        
+
         return rmse
     
     def __geotran__(self, tempdir, trans_db, trans_name, oldimg):

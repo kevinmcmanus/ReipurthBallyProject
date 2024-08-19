@@ -34,6 +34,7 @@ if __name__ == "__main__":
     parser.add_argument('filtername', help='name of this filter')
     parser.add_argument('--rootdir',help='observation data directory', default='/home/kevin/Documents')
 
+    parser.add_argument('--imgdir', help='directory of images to be registered', default='no_bias')
     parser.add_argument('--regdir',help='destination directory for regisered images', default='registered_image')
     parser.add_argument('--map', help='alternate map file', default=None)
     parser.add_argument('--flatdir', help='directory of dome flats', default=None)
@@ -49,6 +50,7 @@ if __name__ == "__main__":
         summary_path = args.map
 
     flatdir = args.flatdir
+    imgdir = args.imgdir
 
     summary = pd.read_csv(summary_path, comment='#')
     #get the index of the minimum rmse:
@@ -56,11 +58,11 @@ if __name__ == "__main__":
     # this gets the transpath for the minimum rmse for each detector
     det_min = summary.loc[summary.groupby('detector').final_rmse.idxmin()][['transpath','detector', 'final_rmse']].set_index('detector')
 
-    images = os.listdir(os.path.join(obs_root, filter_name, 'no_bias'))
+    images = os.listdir(os.path.join(obs_root, filter_name, imgdir))
 
     for img in images:
         imgname = os.path.splitext(img)[0]
-        imga = ImageAlign(obs_root, filter_name, imgname)
+        imga = ImageAlign(obs_root, filter_name, imgname, imgdir)
         
         mn = det_min.loc[imga.detector]
         coord_path = mn.transpath
