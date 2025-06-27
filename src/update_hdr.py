@@ -43,7 +43,7 @@ if __name__ == "__main__":
     try:
         with open(newhdrf, 'r', encoding='utf16') as f:
             newhdr_txt = f.read()
-    except UnicodeDecodeError:
+    except UnicodeError:
         with open(newhdrf, 'r', encoding='utf8') as f:
             newhdr_txt = f.read()
     

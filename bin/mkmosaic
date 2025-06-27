@@ -1,0 +1,8 @@
+#!/bin/bash
+
+#python $SRC/r_d_src/mkmosaic.py $@
+
+str=''
+#for i in "$@"; do echo $i; done
+
+python $SRC/r_d_src/mkmosaic.py "$@"

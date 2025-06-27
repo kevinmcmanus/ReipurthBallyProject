@@ -2,7 +2,7 @@ import os, sys, shutil
 import argparse
 import numpy as np
 
-from ccdproc import ImageFileCollection
+from ccdproc import ImageFileCollection, cosmicray_lacosmic
 from astropy.stats import mad_std
 import ccdproc as ccdp
 from astropy.nddata import CCDData
@@ -36,18 +36,26 @@ def get_channel_info(hdr):
     
     return  chan_info
 
-def chan_slicer(chan_info, chan):
+def chan_slicer(chan_info, chan, offset=0):
     channel = chan-1
     # note the slicer applies to  numpy arrays, so x is columns and y is rows, also zero relative
 
+    # offset applies only to oscan region; its purpose is to move in a few pixels
+    # to avoid border stars bleeding in
+
     #overscan regions are the regions to the left or right of the effective region
-    oscan = {'row': slice(chan_info['y_eff'][channel][0]-1, chan_info['y_eff'][channel][1]),
-             'col': slice(chan_info['x_oscan'][channel][0]-1, chan_info['x_oscan'][channel][1])}
+    # thus the rows of the overscan region need to match the rows of the effective
+    # region, because we want to take the median of  the oscan columns
+    # for each row of the effective region.
+    # The code in the line immediately below looks wrong but it is
+    # in fact correct.
+    oscan = {'row': slice(chan_info['y_eff'][channel][0]-1+offset, chan_info['y_eff'][channel][1]-offset),
+             'col': slice(chan_info['x_oscan'][channel][0]-1+offset, chan_info['x_oscan'][channel][1]-offset)}
     eff   = {'row': slice(chan_info['y_eff'][channel][0]-1, chan_info['y_eff'][channel][1]),
              'col': slice(chan_info['x_eff'][channel][0]-1, chan_info['x_eff'][channel][1])}
     return {'oscan':oscan, 'eff':eff, 'gain': chan_info['gain'][channel]}
 
-def chan_rem_oscan(data, ci, chan, bias):
+def chan_rem_oscan(data, ci, chan,  bias):
     cs = chan_slicer(ci, chan)
 
     # get the effective region for the channel
@@ -69,7 +77,43 @@ def chan_rem_oscan(data, ci, chan, bias):
 
     return eff_reg
 
-def remove_oscan(hdr, data, bias=None):
+def estimate_read_noise(data, chan_info):
+    """
+    estimates read noise as the standard deviation of the overscan regions
+    horizontally adjacent to the effective regions
+    """
+
+    #slices for rows and columns
+    nchan = 4
+    # chan+1 below because chan_slicer uses 1-relative channel index
+    oscan_rows = [chan_slicer(chan_info,chan+1, offset=5)['oscan']['row'] for chan in range(nchan)]
+    oscan_cols = [chan_slicer(chan_info,chan+1, offset=5)['oscan']['col'] for chan in range(nchan)]
+    gains = np.array([chan_slicer(chan_info,chan+1)['gain'] for chan in range(nchan)])
+
+    #put all the oscans into 2d array (chan x flattened oscan region)
+    oscan = np.array([data[oscan_rows[chan], oscan_cols[chan]].flatten() for chan in range(nchan)])
+
+    means = oscan.mean(axis=1)
+    stds = oscan.std(axis=1)
+
+    #scale up to electrons
+    means *= gains
+    stds  *= gains
+    # calc the mean noise and its uncertainty
+    meanbias = means.mean()
+
+    #read noise is the mean of the squared std deviations
+    #see Intro to Error Analysis, John Taylor
+    readnoise = np.sqrt((stds**2).sum())/nchan #see Intro to Error Analysis, John Taylor
+
+    # return the standard deviation
+    return meanbias, readnoise
+
+
+def remove_oscan(hdr, data,
+                 keepborder=False, #if True, don't nan out the border pixels
+                 rmcosmic = False, #if True, apply cosmic ray detection
+                 bias=None):
 
     channel_info = get_channel_info(hdr)
 
@@ -78,26 +122,47 @@ def remove_oscan(hdr, data, bias=None):
     if channel_info['xflip']:
         channels = np.flip(channels)
 
-    #remove the overscan from each region(channel) of the image array
-    eff_regs = [chan_rem_oscan(data, channel_info, chan, bias) for chan in channels]
+    exptime = hdr['EXPTIME']
 
+    #remove the overscan from each region(channel) of the image array
+    eff_regs = [chan_rem_oscan(data, channel_info, chan,
+                               bias=bias) for chan in channels]
+
+    #put the effective regions together in an array
     no_oscan = np.hstack(eff_regs)
 
+    #estimate the read noise:
+    biasmean, readnoise = estimate_read_noise(data, channel_info)
+
+    #cosmic ray removal:
+    if rmcosmic:
+        no_oscan = cosmicray_lacosmic(no_oscan, gain_apply=False, #no_oscan already in electrons
+                                      readnoise=readnoise, sigclip=5,verbose=True)[0]
+    
+    #scale to electrons per second
+    no_oscan /= exptime
+
     #zap the border pixels
-    no_oscan[:8,:] = np.nan; no_oscan[-8:,:] = np.nan
-    no_oscan[:,:8] = np.nan; no_oscan[:,-8:] = np.nan
+    if not keepborder:
+        no_oscan[:8,:] = np.nan; no_oscan[-8:,:] = np.nan
+        no_oscan[:,:8] = np.nan; no_oscan[:,-8:] = np.nan
 
     #adjust the WCS in the header
     new_hdr = hdr.copy()
 
     #adjust the reference pixels
-    # this is what the SDFRED2 code does
+    # this is what the SDFRED2 code does~
     min_x = channel_info['x_eff'].min() - 1
     min_y = channel_info['y_eff'].min() - 1
     new_hdr['CRPIX1'] -= min_x
     new_hdr['CRPIX2'] -= min_y
 
     new_hdr['NAXIS2'], new_hdr['NAXIS1'] = no_oscan.shape
+
+    new_hdr.set('DATA-TYP','DEBIAS','Bias and overscan removed')
+    new_hdr.set('BIASMEAN', biasmean, 'Mean bias from overscan (e- s^-1)')
+    new_hdr.set('RDNOISE', readnoise, 'Est. read noise, (e- s^-1)')
+
     new_hdr['COMMENT'] = '--------------------------------------------------------'
     new_hdr['COMMENT'] = '-------------- WCS Adjustment --------------------------'
     new_hdr['COMMENT'] = '--------------------------------------------------------'
@@ -109,26 +174,37 @@ def remove_oscan(hdr, data, bias=None):
     return new_hdr, no_oscan
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='sets up dir structure for observation')
-    parser.add_argument('objname', help='name of this object')
-    parser.add_argument('--rootdir',help='observation data directory', default='./data')
-    parser.add_argument('--srcdir',help='source directory')
+    parser = argparse.ArgumentParser(description='de-biases image frames')
+    parser.add_argument('srcdir', help='directory of image frames, eg. /home/Documents/Kevin/Pelican/all_fits')
+    parser.add_argument('filter', help='filter name, e.g. N-A-L671')
+    parser.add_argument('destdir', help='destination dir of debiased files, eg. /home/Documents/Kevin/Pelican/N-A-L671/no_bias')
+    parser.add_argument('--biasdir', help='directory of combined files, e.g. /home/Documents/Pelican/combined_bias', default=None)
+    parser.add_argument('--datatype', help='type of object to be debiased, e.g. OBJECT or DOMEFLAT', default='OBJECT')
+    parser.add_argument('--keepborder', help='whether or not to keep orig frame border', action='store_true')
+    parser.add_argument('--rmcosmic', help='whether or not to remove cosmic rays', action='store_true')
+
+
+
 
     args = parser.parse_args()
 
-    obs_root = args.rootdir
-    objname = args.objname
-
-    dirs = obs_dirs(obs_root, objname)
-
-    obs_root = dirs.pop('obs_root')
-    
-
+    srcdir = args.srcdir
+    filter = args.filter
+    destdir = args.destdir
+    biasdir = args.biasdir
+    datatype = args.datatype
+    keepborder = args.keepborder
+    rmcosmic = args.rmcosmic
 
     # loop through the images and subtract the bias
-    im_collection = ImageFileCollection(dirs['raw_image'])
-    image_filter = {'DATA-TYP':'OBJECT'}
+    im_collection = ImageFileCollection(srcdir)
+    image_filter = {'DATA-TYP':datatype, 'FILTER01': filter}
     im_files = im_collection.files_filtered(include_path=True, **image_filter)
+
+    #fix up output directory
+    if os.path.exists(destdir):
+        shutil.rmtree(destdir)
+    os.mkdir(destdir)
 
     for imf in im_files:
         with warnings.catch_warnings():
@@ -141,9 +217,16 @@ if __name__ == '__main__':
 
             detector = hdr['DETECTOR']
             print(f'file: {os.path.basename(imf)}, detector: {detector}')
+            bias = None
+            if biasdir is not None:
+                biasfits = os.path.join(biasdir, detector+'.fits')
+                with fits.open(biasfits) as b:
+                    bias = b[0].data.astype(np.float32)
 
-            new_hdr, no_oscan = remove_oscan(hdr, data)
+            new_hdr, no_oscan = remove_oscan(hdr, data, bias=bias,
+                                             rmcosmic = rmcosmic,
+                                             keepborder=keepborder)
 
             phdu = fits.PrimaryHDU(data = no_oscan, header=new_hdr)
-            outfile = os.path.join(dirs['no_bias'], os.path.basename(imf))
+            outfile = os.path.join(destdir, os.path.basename(imf))
             phdu.writeto(outfile, overwrite=True)

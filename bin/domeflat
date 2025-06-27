@@ -1,0 +1,3 @@
+#! /bin/sh
+
+python $SRC/r_d_src/domeflat.py $*

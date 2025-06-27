@@ -91,6 +91,35 @@ def obs_dirs(data_dir, obj_name):
                 'no_bias': os.path.join(obs_root, 'no_bias'),
                 'distcorr': os.path.join(obs_root, 'distcorr'),
                 'coord_maps': os.path.join(obs_root, 'coord_maps'),
+                'regions': os.path.join(obs_root, 'regions'),
                 'calibration_info': os.path.join(obs_root,'calibration_info')}
     return obsdirs
+
+def preserveold(pathname):
+    #prevents file from being clobbered
+    bname = os.path.basename(pathname)
+    parts = os.path.splitext(bname)
+    dirname = os.path.dirname(pathname)
+    for i in range(9,-1,-1):
+        oldname = f'{parts[0]}_{i:02d}{parts[1]}'
+        oldpath = os.path.join(dirname, oldname)
+        newname = f'{parts[0]}_{i+1:02d}{parts[1]}'
+        newpath = os.path.join(dirname, newname)
+        if os.path.exists(oldpath):
+            os.rename(oldpath, newpath)
+    if os.path.exists(pathname):
+        os.rename(pathname, oldpath)
+            
+if __name__ == '__main__':
+
+    pathtopreserve = '/home/kevin/Documents/junk/sacredtext.txt'
+
+    for i in range(20):
+        content = f'test # {i:02d}\n'
+        preserveold(pathtopreserve)
+        with open(pathtopreserve,'w') as f:
+            f.write(content)
+
+
+
     

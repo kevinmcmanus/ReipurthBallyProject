@@ -4,15 +4,33 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
-            "name": "Python: False Image",
-            "type": "python",
+            "name": "Python: No Bias",
+            "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args":["M8",
-                    "--rootdir", "~/Documents/M8data"
+            "args":["/home/kevin/Documents/ZCMa-2014-12-18/all_fits",
+                    "N-A-L656",
+                    "/home/kevin/Documents/ZCMa-2014-12-18/N-A-L6565/no_bias_rdnoise",
+                    "--rmcosmic",
+                    //"--flatdir", "/home/kevin/Documents/Pelican/N-A-L671/domeflat"
+                    //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
+            ]
+        },
+        {
+            "name": "Python: CombineBias",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args":["/home/kevin/Documents/BiasFrames/all_fits",
+                    "/home/kevin/Documents/BiasFrames/MasterBias",
+                    //"--flatdir", "/home/kevin/Documents/Pelican/N-A-L671/domeflat"
+                    //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
             ]
         },
         {
@@ -24,14 +42,30 @@
             "justMyCode": true
         },
         {
-            "name": "Python: CASJOBS",
+            "name": "Python: domeflat",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": [
-                "M8"
+            "args":["/home/kevin/Documents/Pelican/all_fits",
+                    "N-A-L671",
+                    "/home/kevin/Documents/Pelican/N-A-L671/domeflat",
+                    //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
+            ]
+
+        },
+        {
+            "name": "Python: mkmosaic",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args":["/home/kevin/Documents/ZCMa-2014-12-18/N-A-L656/registered_image",
+                    "--o", "junk.fits",
+                    "--bkcor"
+                    //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
             ],
             // ENVINRONMENT VARIABLES
             "env": {

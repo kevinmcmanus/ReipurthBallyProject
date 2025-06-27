@@ -6,6 +6,7 @@ import tempfile
 #sys.path.append('/home/kevin/repos/ReipurthBallyProject')
 from astropy.io import fits
 from ccdproc import cosmicray_lacosmic
+
 from src.utils import obs_dirs
 from pyraf import iraf
 
@@ -138,6 +139,7 @@ class subaru_reduction():
         f_hdr.pop('BLANK', None)
         f_hdr['IGNRVAL'] = -32768
         f_hdr['DETECTOR'] = detector
+        f_hdr.set('DATA-TYP', 'REGIMG','Registered Image')
         phdu = fits.PrimaryHDU(data = t_data, header=f_hdr)
 
         phdu.writeto(fits_out, overwrite=True)
