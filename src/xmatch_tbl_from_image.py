@@ -1,4 +1,4 @@
-import os,sys
+import os,sys, shutil
 from astropy.io import fits
 import astropy.units as u
 from astropy.coordinates import SkyCoord
@@ -9,18 +9,19 @@ from astropy.time import Time
 from astropy.table import Table
 import numpy as np
 
-import warnings
+import warnings, yaml
 
 import argparse
 
-from utils import gaia_from_image
+
 
 sys.path.append(os.path.expanduser('~/repos/runawaysearch/src'))
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 from gaiastars import gaiastars as gs
 
 #from gaia_ps1 import gaia_xmatch_panstars
-from utils import obs_dirs
+
+import chan_info as ci
 
 def conesearch_params(wcs):
 
@@ -51,6 +52,7 @@ def get_gaia_data(imgpath, xmatch_file):
             hdr = hdul[0].header
             wcs = WCS(hdr)
             mjd = hdr['MJD']
+            frameid = hdr['FRAMEID']
 
     ra, dec, rad = conesearch_params(wcs)
     print(f'Conesearch params: ra: {ra}, dec: {dec}, radius: {rad}')
@@ -63,7 +65,7 @@ def get_gaia_data(imgpath, xmatch_file):
     xmatch_tbl = Table.from_pandas(gaia_records.objs.reset_index())
 
     #move the coordinates to the obs date time
-    t_obs = Time(mjd, hdr['MJD'], scale='utc', format='mjd')
+    t_obs = Time(mjd,  scale='utc', format='mjd')
     #hard code for gaia dr3:
     t_gaia = Time(2016, scale='tcb',format='jyear')
 
@@ -77,49 +79,58 @@ def get_gaia_data(imgpath, xmatch_file):
     
 
     #move the positions to the obs time and reframe to FK5
-    coords = coords_gaia.apply_space_motion(new_obstime=t_obs).fk5
-    xmatch_tbl['RA_OBSDATE'] = coords.ra 
-    xmatch_tbl['DEC_OBSDATE'] = coords.dec
+    coords_obsdate = coords_gaia.apply_space_motion(new_obstime=t_obs).fk5
+    xmatch_tbl['ra_obsdate'] = coords_obsdate.ra 
+    xmatch_tbl['dec_obsdate'] = coords_obsdate.dec
 
-    # moved to align_image.create_coordmap
-        # #add pixel position for each coord (zero-relative, ie array indexes)
-        # x,y = wcs.world_to_pixel_values(coords_gaia.ra, coords_gaia.dec)
-        # xmatch_tbl['x'] = x
-        # xmatch_tbl['y'] = y
-    xmatch_tbl['GaiaId'] = [f'gaia_{i:04d}' for i in range(len(xmatch_tbl))]
+    #add pixel position for each coord (0-relative, ie. python/numpy style)
+
+    #coordinates as reported by gaia
+    x,y = wcs.world_to_pixel_values(coords_gaia.ra, coords_gaia.dec)
+    xmatch_tbl['x_gaia'] = x
+    xmatch_tbl['y_gaia'] = y
+
+    # moved to the observation date
+    x,y = wcs.world_to_pixel_values(coords_obsdate.ra, coords_obsdate.dec)
+    xmatch_tbl['x_obsdate'] = x
+    xmatch_tbl['y_obsdate'] = y
+
+    #tack on some meta data
+    xmatch_tbl['frameid'] = frameid
+    xmatch_tbl['gaiaid'] = [f'gaia-{i:04d}' for i in range(len(xmatch_tbl))]
+
 
 
     xmatch_tbl.write(xmatch_file, table_id= 'xmatch',format = 'votable', overwrite=True)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='creates cross match table for observation')
-    parser.add_argument('objname', help='name of this object')
-    #parser.add_argument('obsname', help='name of this observation')
-    parser.add_argument('--rootdir',help='observation data directory', default='./data')
-    parser.add_argument('--maxmag',help='max mag in query', type=float, default=30.0) #get 'em all
-    
+    parser = argparse.ArgumentParser(description='creates Gaia catalog for each frame')
+    parser.add_argument('--config_file', help='name of this object')
 
     args = parser.parse_args()
-    
-    obs_root = args.rootdir
-    objname = args.objname
-    max_mag = args.maxmag
+    with open(args.config_file,'r') as f:
+        config = yaml.safe_load(f)
 
-    #set up gaia query
+    config = config['GaiaCatalog']
     
-    mag_str = f'{max_mag}'
+    fitsdir = config['fitsdir']
+    destdir = config['destdir']
+    maxmag = config.pop('maxmag', 33) # gets 'em all by default
+
+    #fix up output directory
+    if os.path.exists(destdir):
+        shutil.rmtree(destdir)
+    os.mkdir(destdir)
+    
+    #set up gaia query
+    mag_str = f'{maxmag}'
     gs.gaia_source_constraints= [
         '{schema}.gaia_source.phot_g_mean_mag <= ' + mag_str]
-    flux_cols = ['source_id', 'ra',
-    'dec',
-    'parallax',
-    'pmra',
-    'pmdec',
-    'radial_velocity',
-    'phot_g_mean_mag',
-    'phot_bp_mean_mag',
-    'phot_rp_mean_mag']+['phot_g_mean_flux', 'phot_bp_mean_flux', 'phot_rp_mean_flux']
+    #query columns
+    flux_cols = ['source_id', 'ra', 'dec','parallax','pmra','pmdec','radial_velocity',
+                'phot_g_mean_mag','phot_bp_mean_mag','phot_rp_mean_mag',
+                'phot_g_mean_flux', 'phot_bp_mean_flux', 'phot_rp_mean_flux']
     #note: ruwe removed to make query work both dr2 and dr3
     gs.gaia_column_dict_gaiadr3['gaiadr3.gaia_source']['tblcols'] = flux_cols
 
@@ -127,17 +138,13 @@ if __name__ == "__main__":
     # scr2 = os.environ.get('CASJOBS_USERID')
     # assert scr2 is not None
 
-    
 
-    dirs = obs_dirs(obs_root, objname)
-
-    im_collection =  ImageFileCollection(dirs['no_bias'],glob_include='S*.fits')
-
+    im_collection =  ImageFileCollection(fitsdir)
 
     for imgname in im_collection.files:
-        inpath = os.path.join(dirs['no_bias'], imgname)
+        inpath = os.path.join(fitsdir, imgname)
         name_root = os.path.splitext(imgname)
-        outpath = os.path.join(dirs['xmatch_tables'], name_root[0]+'.xml')
+        outpath = os.path.join(destdir, name_root[0]+'.xml')
         print(f'Input: {inpath}, xmatch file: {outpath}')
         get_gaia_data(inpath, outpath)
         print()

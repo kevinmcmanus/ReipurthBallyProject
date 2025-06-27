@@ -1,35 +1,98 @@
+import os, sys, shutil
+import argparse
 import numpy as np
 
-from scipy.ndimage import find_objects, label, generate_binary_structure, maximum_filter, convolve
+import yaml
+
+from ccdproc import ImageFileCollection
+from astropy.stats import mad_std
+from astropy.table import Table
+import ccdproc as ccdp
+from astropy.io import fits
 from astropy.wcs import WCS
-from astropy.table import QTable
 
-def img_find_objects(hdu, obj_minval=None, pcttile=99.0, min_size=80, mask_percent=0.5):
-    n_pix_y, n_pix_x = hdu.data.shape
-    # pick the mask size based on 0.5% of the x pixel len
-    m_sz = int(n_pix_x*mask_percent/100.0)
-    if obj_minval is None:
-        obj_minval = np.percentile(hdu.data, pcttile)
+import sep
 
-    #label the features
-    convd = convolve(hdu.data, np.ones((m_sz, m_sz))/(m_sz**2))
-    img_masked = convd >= obj_minval
-    s = generate_binary_structure(2,2)
-    labeled_array, nfeatures = label(img_masked, structure=s)
+import warnings
+import tempfile
 
-    #locate the features
-    locs = find_objects(labeled_array)
-    tbl = QTable({"img_objID":np.arange(len(locs))+1,
-                  "xslice":[l[1] for l in locs],
-                  "yslice":[l[0] for l in locs],
-                  "area":  [ (l[0].stop-l[0].start)*(l[1].stop-l[1].start) for l in locs],
-                  "pixcenterX": [ l[1].start+(l[1].stop-l[1].start)/2 for l in locs],
-                  "pixcenterY": [ l[0].start+(l[0].stop-l[0].start)/2 for l in locs]})
-    tbl.add_index('img_objID')
+sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
+import chan_info as ci
 
-    # sky coords:
-    wcs = WCS(hdu.header)
-    tbl['coord'] = wcs.pixel_to_world(tbl['pixcenterX'],tbl['pixcenterY']).icrs
+
+def find_stars(frameid, hdr, data,  regout=None, thresh = 50,
+               deblend_nthresh = 32, deblend_cont=0.005,
+               byteswap=False,
+               filter_kernel = np.array([[1,2,1],[2,4,2],[1,2,1]])):
+
+    img_data = data.byteswap().newbyteorder() if byteswap else data
+    img_bkg = sep.Background(img_data)
+    bkg_img =img_bkg.back()
+    img_sub = img_data - bkg_img
+    objects = sep.extract(img_sub, thresh, err=img_bkg.globalrms,
+                          deblend_cont=deblend_cont, deblend_nthresh=deblend_nthresh,
+                          filter_kernel = filter_kernel)
+    print(f'{frameid}: Number of objects identified: {len(objects)}')
+    objects_tbl = Table(objects, meta={'ExtractionThreshold': thresh, 'err': img_bkg.globalrms})
+
+    if regout is not None:
+
+        ds9tbl = Table(objects)
+        # get the ra and dec for each object from its pixel coords
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            wcs = WCS(hdr)
+        ra,dec = wcs.pixel_to_world_values(ds9tbl['x'], ds9tbl['y'])
+        ds9tbl['ra'] = ra
+        ds9tbl['dec'] = dec
+        ds9tbl['eccentricity'] = np.sqrt(ds9tbl['a']**2 - ds9tbl['b']**2)/ds9tbl['a']
+        ds9tbl['include'] = True
+        ds9tbl['force'] = False
+
+        # catalogs use python coords, not ds9, so following commented out
+        ds9tbl['fits_x'] = ds9tbl['x'] + 1
+        ds9tbl['fits_y'] = ds9tbl['y'] + 1
+
+        ds9tbl['frameid'] = frameid
+        ds9tbl['objid'] = [f'obj-{i:04d}' for i in range(len(ds9tbl))]
+
+        # get the columns in a more better order
+        cols = ['objid','ra','dec','include','force','x','y','fits_x','fits_y','npix','eccentricity', 'flux']
+        ds9tbl[cols].write(regout, table_id= 'objects',format = 'votable', overwrite=True)
+        
+    return objects_tbl
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='creates object catalogs for each image')
+
+    parser.add_argument('--config_file', help='Calibration Configuration YAML')
+
+    args = parser.parse_args()
+    with open(args.config_file,'r') as f:
+        config = yaml.safe_load(f)
+
+    config = config['FindObjects']
+    fitsdir = config.pop('fitsdir')
+    destdir = config.pop('destdir')
+    thresh = config.pop('thresh')
+
+
+    #fix up output directory
+    if os.path.exists(destdir):
+        shutil.rmtree(destdir)
+    os.mkdir(destdir)
+
+    cols = ['MJD', 'OBJECT', 'DATA-TYP','DETECTOR','EXPTIME', 'GAIN', 'EXP-ID']
+    im_collection = ImageFileCollection(fitsdir, keywords=cols)
+    image_filter = {'DATA-TYP':'CALIBRTD' }
+    im_files = im_collection.files_filtered(include_path=True, **image_filter)
+    if len(im_files) == 0:
+        raise ValueError(f'No calibrated frames found in {fitsdir}')
     
+    for frame in im_files:
 
-    return tbl
+        hdr, data = ci.get_fits(frame)
+        frame_name = hdr['FRAMEID']
+        dest_name = os.path.join(destdir, frame_name+'.xml')
+
+        find_stars(frame_name, hdr, data, regout=dest_name, thresh=thresh)

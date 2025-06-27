@@ -21,6 +21,19 @@
             ]
         },
         {
+            "name": "Python: CombineBias",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args":["/home/kevin/Documents/BiasFrames/all_fits",
+                    "/home/kevin/Documents/BiasFrames/MasterBias",
+                    //"--flatdir", "/home/kevin/Documents/Pelican/N-A-L671/domeflat"
+                    //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
+            ]
+        },
+        {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
