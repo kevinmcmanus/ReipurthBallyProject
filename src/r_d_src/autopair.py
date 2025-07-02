@@ -146,7 +146,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--config_file', help='AutoPair Configuration YAML')
     parser.add_argument('--resume', action='store_true')
-    parser.add_argument('--o',help='result output file', default='autopair.out')
+    parser.add_argument('--o',help='result output file', default='ap-out.txt')
 
     #allow the pairing params to be overridden on command line
     for param in defaults:
@@ -217,4 +217,4 @@ if __name__ == '__main__':
 
 
     if resout is not None:
-        restbl.write(resout, table_id= 'results',format = 'votable', overwrite=True)
+        restbl.write(resout, table_id= 'results',format = 'ascii', overwrite=True)

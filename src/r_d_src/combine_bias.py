@@ -23,7 +23,7 @@ def new_header(data_typ, old_hdr, constituent_list):
     if data_typ == 'BIAS':
         new_hdr.append(('DATA-TYP','COMBIAS','Combined Bias'))
     elif data_typ == 'DARK':
-        new_hdr.append(('DATA-TYP' 'COMDARK', 'Combined Dark'))
+        new_hdr.append(('DATA-TYP','COMDARK', 'Combined Dark'))
     else:
         raise ValueError(f'Invalid exposure type: {data_typ}')
 

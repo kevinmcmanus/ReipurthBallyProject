@@ -21,17 +21,14 @@ import chan_info as ci
 
 
 def find_stars(frameid, hdr, data,  regout=None, thresh = 50,
-               deblend_nthresh = 32, deblend_cont=0.005,
-               byteswap=False,
-               filter_kernel = np.array([[1,2,1],[2,4,2],[1,2,1]])):
+               byteswap=False):
 
     img_data = data.byteswap().newbyteorder() if byteswap else data
     img_bkg = sep.Background(img_data)
     bkg_img =img_bkg.back()
     img_sub = img_data - bkg_img
-    objects = sep.extract(img_sub, thresh, err=img_bkg.globalrms,
-                          deblend_cont=deblend_cont, deblend_nthresh=deblend_nthresh,
-                          filter_kernel = filter_kernel)
+    objects = sep.extract(img_sub, thresh, bkg_img)# err=img_bkg.globalrms)
+
     print(f'{frameid}: Number of objects identified: {len(objects)}')
     objects_tbl = Table(objects, meta={'ExtractionThreshold': thresh, 'err': img_bkg.globalrms})
 
