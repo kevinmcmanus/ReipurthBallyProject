@@ -1,4 +1,4 @@
-import numpy as np
+import numpy as np, pandas as pd
 
 
 def match_to_regvec(match_tbl, src_xy, dest_xy, reg_path, color='red',troot='m'):
@@ -38,7 +38,36 @@ def match_to_regvec(match_tbl, src_xy, dest_xy, reg_path, color='red',troot='m')
                 title = '{' + f'{troot}-{i:04d}' + '}'
                 vecstr += f' text={title}'
             reg.write(vecstr+'\n')
-            
+
+def regvec_to_match(regfile, src_xy=('x','y'), dest_xy=('dest_x', 'dest_y')):
+    def parse_vecline(line, src_xy, dest_xy):
+        # first few chars should be '# vector'
+        if not (line.startswith('# vector') or line.startswith('#vector')):
+            print('Invalid line, skipping')
+            pass
+        # get text between ()
+        inner_str = line.split('(')[-1].split(')')[0]
+        vals = inner_str.split(',')
+        rvals = [float(s) for s in vals]
+        # coordinates for the vector heads
+        # rvals[2] is vector length in pixels
+        # rvals[3] is angle wrt x-axis in degrees
+        x_dest = rvals[0] + np.cos(np.radians(rvals[3]))*rvals[2]
+        y_dest = rvals[1] + np.sin(np.radians(rvals[3]))*rvals[2]
+
+        r_dict = {src_xy[0]:rvals[0], src_xy[1]:rvals[1], dest_xy[0]:x_dest, dest_xy[1]:y_dest}
+        return r_dict
+
+    with open(regfile) as regf:
+        veclines = regf.readlines()
+        print(veclines[0])
+        if veclines[0] != '# Region file format: DS9 version 4.1\n':
+            raise ValueError(f'Invalid region file: {regfile}')
+        
+        match_df = pd.DataFrame(data=[parse_vecline(vc, src_xy, dest_xy)\
+                                      for vc in veclines[3:]])
+
+        return match_df
 
 def calc_distance(cat, obj_xy, cat_xy):
     """

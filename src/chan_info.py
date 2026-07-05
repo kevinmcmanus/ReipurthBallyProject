@@ -50,7 +50,7 @@ class chan_info_list():
         for chan in rng:
             yield self.ci_list[chan]
         
-def rm_oscan(hdr, data):
+def rm_oscan(hdr, data, data_typ = 'NO-OSCAN'):
         """
         removes overscan region
         returns gain adjusted image norm'd to electrons per second
@@ -65,7 +65,7 @@ def rm_oscan(hdr, data):
             )
         new_hdr = hdr.copy()
         new_hdr['NAXIS2'], new_hdr['NAXIS1'] = new_data.shape
-        new_hdr['DATA-TYP'] = 'NO-OSCAN'
+        new_hdr['DATA-TYP'] = data_typ
         new_hdr['BUNIT'] = 'electron / s'
         new_hdr.pop('BLANK', None)
 

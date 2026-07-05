@@ -5,6 +5,7 @@
     "version": "0.2.0",
     "configurations": [
 
+
         {
             "name": "Python: No Bias",
             "type": "debugpy",
@@ -52,6 +53,19 @@
                     "N-A-L671",
                     "/home/kevin/Documents/Pelican/N-A-L671/domeflat",
                     //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
+            ]
+
+        },
+                
+        {
+            "name": "Python: autopair",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args":["--config_file", "/home/kevin/Observations/ZCMa-2014-12-18/W-S-I+/config.yaml"
+
             ]
 
         },

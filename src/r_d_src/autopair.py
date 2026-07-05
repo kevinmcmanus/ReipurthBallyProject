@@ -7,6 +7,10 @@ import yaml
 import warnings
 
 from astropy.table import Table, join
+from astropy.io import fits
+from astropy.wcs import WCS
+from astropy.coordinates import SkyCoord
+import astropy.units as u
 
 import ccdproc as ccdp
 
@@ -21,11 +25,13 @@ from catalog import *
 # (min_mag of 30 means use 'em all)
 defaults = {'horiz_margin': 10, 'vert_margin': 10,
             'min_pix':20, 'max_pix': 2500,
+            'min_flux':50000, 'max_flux':300000,
             'max_ecc': 0.75,
             'gaia_rad': 200,
             'cat_min_gmag': 30., 'cat_min_rpmag':30., 'cat_min_bpmag':30.}
 defaults_types = {'horiz_margin': 'int', 'vert_margin': 'int',
             'min_pix':'int', 'max_pix': 'int',
+            'min_flux':'int', 'max_flux': 'int',
             'max_ecc': 'float',
             'gaia_rad': 'int',
             'cat_min_gmag': 'float', 'cat_min_rpmag':'float', 'cat_min_bpmag':'float'}
@@ -34,16 +40,18 @@ def auto_pair(config, frameid, detector, params):
 
     t_start = perf_counter()
 
-    #calibrateddir = config.pop('calibrateddir')
-    #matchedcatdir = config.pop('matchedcatdir')
     objcatdir = config['objcatdir']
     gaiacatdir = config['gaiacatdir']
-    #destdir = config.pop('destdir')
     regiondir = config['regiondir']
 
     #get the frame's object and gaia catalogs
     gaia_cat = load_catalog(os.path.join(gaiacatdir,frameid+'.xml'), index_col='gaiaid')
-    obj_cat = load_catalog(os.path.join(objcatdir,frameid+'.xml'), index_col='objid')
+    obj_cat = load_catalog(os.path.join(objcatdir,frameid+'.xml'), index_col=None)
+
+    N_gaia = len(gaia_cat)
+    print(f'N Objects: {len(obj_cat)}, N Gaia: {N_gaia}')
+    #update the gaia catalogs x,y positions wrt frame's wcs
+    update_gaia_xy(config, frameid, gaia_cat)
 
     # clean up the object catalog
     criteria = np.array([
@@ -54,6 +62,8 @@ def auto_pair(config, frameid, detector, params):
         obj_cat['y'] <= (4177-params['vert_margin']),
         obj_cat['npix'] >= params['min_pix'],
         obj_cat['npix'] <= params['max_pix'],
+        obj_cat['flux'] >= params['min_flux'],
+        obj_cat['flux'] <= params['max_flux'],
         obj_cat['eccentricity'] <= params['max_ecc'] #don't want elongated objects
     ])
     # 'and' the criteria together and 'or' the forced inclusion
@@ -71,11 +81,16 @@ def auto_pair(config, frameid, detector, params):
     validgaia = criteria.prod(axis=0).astype(bool)
     gaia_cat = gaia_cat[validgaia]
 
-    #print(f'Object catalog trimmed from {len(obj_cat)} to {len(obj_fit)} rows)')
+    print(f'Object catalog trimmed from {len(obj_cat)} to {len(obj_fit)} rows)')
+    print(f'Gaia catalog trimmed from {N_gaia} to {len(gaia_cat)} rows)')
 
     # find the best partner for each object and update the obj_fit table
-    best_gaia = [find_best_gaia(o, obj_fit, gaia_cat, gaia_rad=params['gaia_rad']) for o in obj_fit]
+    best_gaia = np.array([find_best_gaia(o, obj_fit, gaia_cat, gaia_rad=params['gaia_rad']) for o in obj_fit])
+    # delete the rows out of obj_fit for which there's no best gaia:
     obj_fit['gaiaid'] = best_gaia
+    no_match = np.where(best_gaia == 'NoMatch')[0]
+    if len(no_match) != 0:
+        obj_fit.remove_rows(list(no_match))
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -132,13 +147,38 @@ def find_best_gaia(obj, obj_cat, gaia_cat, gaia_rad=200):
     assert rmse.shape == (n_gaia, )
 
     # find the gaia obj with the least rmse
-    rmse_min_i = rmse.argmin()
-    gaiaid = gaia_cat[near_gaia][rmse_min_i]['gaiaid']
+    if len(rmse) == 0:
+        gaiaid = 'NoMatch'
+    else:
+        rmse_min_i = rmse.argmin()
+        gaiaid = gaia_cat[near_gaia][rmse_min_i]['gaiaid']
     #print(f'Min rmse: {rmse[rmse_min_i]}')
 
     return gaiaid
 
+def update_gaia_xy(config, frameid, gaiacat):
+    #get the wcs for the frame
+    caldir = config['calibrateddir']
+    framepath = os.path.join(caldir, frameid+'.fits')
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        with fits.open(framepath) as hdul:
+            wcs = WCS(hdul[0].header)
 
+    coords_gaia = SkyCoord(ra=gaiacat['ra'], dec=gaiacat['dec'], unit=u.deg, frame='fk5')
+
+    #add pixel position for each coord (0-relative, ie. python/numpy style)
+
+    #coordinates as reported by gaia
+    x,y = wcs.world_to_pixel_values(coords_gaia.ra, coords_gaia.dec)
+    gaiacat['x_gaia'] = x
+    gaiacat['y_gaia'] = y
+
+    # moved to the observation date
+    coords_obsdate = SkyCoord(ra=gaiacat['ra_obsdate'], dec=gaiacat['dec_obsdate'], unit=u.deg, frame='fk5')
+    x,y = wcs.world_to_pixel_values(coords_obsdate.ra, coords_obsdate.dec)
+    gaiacat['x_obsdate'] = x
+    gaiacat['y_obsdate'] = y
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='pairs image objects with Gaia objects')
@@ -165,7 +205,9 @@ if __name__ == '__main__':
     apparams = config['autopairparams']
     for p in defaults:
         v = apparams.pop(p, defaults[p])
+        print(type(__builtins__))
         params[p] = getattr(__builtins__, defaults_types[p])(v)
+        #params[p] = (__builtins__[defaults_types[p]])(v)
     if len(apparams) != 0:
         raise ValueError('Invalid pairing param in yaml file')
     # now get the params from command line
@@ -174,8 +216,8 @@ if __name__ == '__main__':
         if argdict[p] is not None:
             v = argdict[p]
             params[p] = getattr(__builtins__, defaults_types[p])(v)
+            #params[p] = (__builtins__[defaults_types[p]])(v)
 
-    print(f'Parameters: {params}')
 
 
     calibrateddir = config['calibrateddir']
@@ -217,4 +259,4 @@ if __name__ == '__main__':
 
 
     if resout is not None:
-        restbl.write(resout, table_id= 'results',format = 'ascii', overwrite=True)
+        restbl.write(resout, format = 'ascii', overwrite=True)

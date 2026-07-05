@@ -20,14 +20,14 @@ sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 import chan_info as ci
 
 
-def find_stars(frameid, hdr, data,  regout=None, thresh = 50,
+def find_stars(frameid, hdr, data,  mask, regout=None, thresh = 50,
                byteswap=False):
 
     img_data = data.byteswap().newbyteorder() if byteswap else data
-    img_bkg = sep.Background(img_data)
+    img_bkg = sep.Background(img_data, mask=mask)
     bkg_img =img_bkg.back()
     img_sub = img_data - bkg_img
-    objects = sep.extract(img_sub, thresh, bkg_img)# err=img_bkg.globalrms)
+    objects = sep.extract(img_sub, thresh, mask=mask, err=bkg_img)# err=img_bkg.globalrms)
 
     print(f'{frameid}: Number of objects identified: {len(objects)}')
     objects_tbl = Table(objects, meta={'ExtractionThreshold': thresh, 'err': img_bkg.globalrms})
@@ -71,6 +71,7 @@ if __name__ == '__main__':
     config = config['FindObjects']
     fitsdir = config.pop('fitsdir')
     destdir = config.pop('destdir')
+    maskdir = config.pop('maskdir')
     thresh = config.pop('thresh')
 
 
@@ -90,6 +91,9 @@ if __name__ == '__main__':
 
         hdr, data = ci.get_fits(frame)
         frame_name = hdr['FRAMEID']
+        detector = hdr['DETECTOR']
+        mask_name = os.path.join(maskdir, detector+'_mask.fits')
+        _, mask = ci.get_fits(mask_name)
         dest_name = os.path.join(destdir, frame_name+'.xml')
 
-        find_stars(frame_name, hdr, data, regout=dest_name, thresh=thresh)
+        find_stars(frame_name, hdr, data, mask.astype(bool), regout=dest_name, thresh=thresh)

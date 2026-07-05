@@ -90,7 +90,7 @@ def norm_to_exp_med(exp_medians, flatdir, destdir):
         dest = os.path.join(destdir, os.path.basename(flat))
         phdu.writeto(dest, overwrite=True)
 
-def med_combine(flatdir, tempdir):
+def med_combine(flatdir, tempdir, flattype):
     """
     combines flats grouped by detector
     outputs one median combined flat for each detector
@@ -122,9 +122,10 @@ def med_combine(flatdir, tempdir):
                         method='median',
                         sigma_clip=True, sigma_clip_low_thresh=5, sigma_clip_high_thresh=5,
                         sigma_clip_func=np.ma.median, sigma_clip_dev_func=mad_std,
-                        mem_limit=4e9
+                        mem_limit=8e9
                         )
             combined_flat.header['EXP-ID'] = 'COMBFLAT'
+            combined_flat.header['DATA-TYP'] = flattype
 
             combined_flat.write(f_out, overwrite=True)
 
@@ -173,7 +174,7 @@ if __name__ == '__main__':
         norm_to_exp_med(exp_medians, flatdir, flatdir)
 
         # median combine by detector
-        combineddir = med_combine(flatdir, temp_dir)
+        combineddir = med_combine(flatdir, temp_dir, flattype)
         print(os.listdir(combineddir))
 
         #renormalize and copy to final destination

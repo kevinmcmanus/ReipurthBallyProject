@@ -7,10 +7,12 @@ from astropy.stats import mad_std
 import ccdproc as ccdp
 from astropy.io import fits
 from astropy.time import Time
+from astropy.stats import sigma_clip
 
 import warnings
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
+
 
 def get_date_obs(fitspath):
     with fits.open(fitspath) as f:
@@ -53,7 +55,30 @@ def new_header(data_typ, old_hdr, constituent_list):
     new_hdr.append(('CLPDEV', 'astropy.stats.madstd', 'Sigma_clip_def_func'), end=True)
 
     return new_hdr
-    
+
+import chan_info as ci
+def mk_mask(img, hdr, maskthresh=10.0):
+
+    ci_list = ci.chan_info_list(hdr)
+    masks = []
+
+    #loop through the channels, sigclip each individually, 'and' into the mask
+    for c_info in ci_list.channels():
+        eff_region = img[c_info.eff_rows, c_info.eff_cols]
+        clip = sigma_clip(eff_region, sigma_upper=maskthresh, sigma_lower = 100.0,masked=True, grow=2.5)
+        masks.append(clip.mask)
+    new_mask = np.hstack(masks)
+
+    new_hdr = hdr.copy()
+    new_hdr['NAXIS2'], new_hdr['NAXIS1'] = new_mask.shape
+    new_hdr['DATA-TYP'] = 'MASK'
+
+    n_masked = new_mask.sum()
+    print(f'Pixels masked: {n_masked}')
+    return new_mask, new_hdr
+
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='combines bias or dark files')
@@ -83,6 +108,7 @@ if __name__ == '__main__':
         det = detector['DETECTOR']
         b_out = os.path.join(destdir, det +'.fits')
         c_out = os.path.join(destdir, det +'.cons')
+        m_out = os.path.join(destdir, det +'_mask.fits')
 
         print(f'********* Detector: {det} ***********')
         print(f'output: {b_out}')
@@ -95,21 +121,23 @@ if __name__ == '__main__':
                     method='median',
                     sigma_clip=True, sigma_clip_low_thresh=5, sigma_clip_high_thresh=5,
                     sigma_clip_func=np.ma.median, sigma_clip_dev_func=mad_std,
-                    mem_limit=4e9
+                    mem_limit=8e9
                     )
             
+            # update the header and write the fits
             new_hdr = new_header(data_typ, combined_bias.header,
                                  list(detector_group['file']))
-
             phdu = fits.PrimaryHDU(data = combined_bias.data.astype(np.uint16),
                                     header=new_hdr)
-
-
             phdu.writeto(b_out, overwrite=True)
 
-            # combined_bias.meta['combined'] = True
-
-            # combined_bias.write(b_out, overwrite=True)
+            # create the mask from the bais file
+            if data_typ == 'DARK':
+                mask, mask_hdr = mk_mask(combined_bias.data,
+                                         combined_bias.header)
+                                           
+                phdu = fits.PrimaryHDU(data=mask.astype(np.uint16), header=mask_hdr)
+                phdu.writeto(m_out, overwrite=True)
 
         #write out the consituent file names
         with open(c_out,'w') as con:
