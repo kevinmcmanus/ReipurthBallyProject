@@ -91,7 +91,7 @@ if __name__ == '__main__':
     # parser.add_argument('fitsdir', help='directory of frame fits files to be calibrated')
     # parser.add_argument('--biasdir', help='directory containing master BIAS fits file')
     # parser.add_argument('--darkdir',help='directory containing master DARK fits file')
-    # parser.add_argument('--destdir',help='directory where to put calibrated frames')
+    # parser.add_argument('--caldir',help='directory where to put calibrated frames')
     # parser.add_argument('--filter',help='which filter', default='W-S-I+')
     parser.add_argument('--config_file', help='Calibration Configuration YAML')
 
@@ -99,18 +99,18 @@ if __name__ == '__main__':
     with open(args.config_file,'r') as f:
         config = yaml.safe_load(f)
 
-    config = config['Calibration']
+    config = config['SubaruReduction']
     srcdir = config.pop('fitsdir')
-    destdir = config.pop('destdir')
+    caldir = config.pop('caldir')
     biasdir = config.pop('biasdir')
     darkdir = config.pop('darkdir')
     flatdir = config.pop('flatdir', None)
     filter = config.pop('filter')
 
     #fix up output directory
-    if os.path.exists(destdir):
-        shutil.rmtree(destdir)
-    os.mkdir(destdir)
+    if os.path.exists(caldir):
+        shutil.rmtree(caldir)
+    os.mkdir(caldir)
     
     cols = ['MJD', 'OBJECT', 'DATA-TYP','DETECTOR','EXPTIME', 'GAIN']
     im_collection = ImageFileCollection(srcdir, keywords = cols)
@@ -120,7 +120,7 @@ if __name__ == '__main__':
 
     for fin in im_frames.files:
         bn = os.path.basename(fin)
-        fout = os.path.join(destdir, bn)
+        fout = os.path.join(caldir, bn)
         print(f'Input: {fin}')
 
         frame_hdr, frame_data = get_fits(fin)

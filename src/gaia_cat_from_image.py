@@ -112,7 +112,7 @@ if __name__ == "__main__":
     with open(args.config_file,'r') as f:
         config = yaml.safe_load(f)
 
-    config = config['SubaruReduce']
+    config = config['SubaruReduction']
     
     caldir = config['caldir']
     gaiacatdir = config['gaiacatdir']

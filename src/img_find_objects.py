@@ -69,7 +69,7 @@ if __name__ == '__main__':
         config = yaml.safe_load(f)
 
     config = config['SubaruReduction']
-    caldir = config.pop('caldir')
+    regdir = config.pop('regdir')
     objcatdir = config.pop('objcatdir')
     maskdir = config.pop('maskdir')
     thresh = config.pop('thresh')
@@ -81,11 +81,11 @@ if __name__ == '__main__':
     os.mkdir(objcatdir)
 
     cols = ['MJD', 'OBJECT', 'DATA-TYP','DETECTOR','EXPTIME', 'GAIN', 'EXP-ID']
-    im_collection = ImageFileCollection(caldir, keywords=cols)
+    im_collection = ImageFileCollection(regdir, keywords=cols)
     image_filter = {'DATA-TYP':'CALIBRTD' }
     im_files = im_collection.files_filtered(include_path=True, **image_filter)
     if len(im_files) == 0:
-        raise ValueError(f'No calibrated frames found in {caldir}')
+        raise ValueError(f'No calibrated frames found in {regdir}')
     
     for frame in im_files:
 
