@@ -158,8 +158,8 @@ def find_best_gaia(obj, obj_cat, gaia_cat, gaia_rad=200):
 
 def update_gaia_xy(config, frameid, gaiacat):
     #get the wcs for the frame
-    caldir = config['caldir']
-    framepath = os.path.join(caldir, frameid+'.fits')
+    regdir = config['regdir']
+    framepath = os.path.join(regdir, frameid+'.fits')
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         with fits.open(framepath) as hdul:
@@ -220,7 +220,7 @@ if __name__ == '__main__':
 
 
 
-    caldir = config['caldir']
+    regdir = config['regdir']
     regiondir = config['regiondir']
     resuming = args.resume
 
@@ -229,7 +229,7 @@ if __name__ == '__main__':
         files = [f if f.endswith('.fits') else f+'.fits' for f in args.files]
         resout = None
     else:
-        # work on all files in caldir
+        # work on all files in regdir
         # fix up output directories
         if not resuming:
             resout = args.o
@@ -237,14 +237,14 @@ if __name__ == '__main__':
                 if os.path.exists(dir):
                     shutil.rmtree(dir)
                 os.mkdir(dir)
-        im_collection=ccdp.ImageFileCollection(caldir)
+        im_collection=ccdp.ImageFileCollection(regdir)
         files = im_collection.files
 
     restbl = Table(names = ['FrameID', 'Detector', 'NPairs', 'RMSE','ElapsedTime'],
                    dtype=['S12', 'S12', 'i4', 'f4', 'f4'])
     for calimage in files:
   
-        impath = os.path.join(caldir, calimage)
+        impath = os.path.join(regdir, calimage)
         hdr, img = ci.get_fits(impath)
         frameid = hdr['FRAMEID']
         detector = hdr['DETECTOR']

@@ -15,7 +15,7 @@ import tempfile
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 
 from utils import obs_dirs
-from no_bias import remove_oscan
+from r_d_src.no_bias import remove_oscan
 
 
 # debias

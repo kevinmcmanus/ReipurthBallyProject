@@ -20,7 +20,7 @@ sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src/r_d_src'))
 from utils import obs_dirs, preserveold
 import warnings
 
-import argparse
+import argparse, yaml
 from MontagePy.main import mImgtbl, mMakeHdr, mProjExec, mAdd
 
 #these fields extracted from last fits header to go in the output file
@@ -106,7 +106,8 @@ def global_background(fitslist):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='creates mosaic from list of files')
 
-    parser.add_argument('image_dir', help='directory of images')
+    parser.add_argument('--image_dir', default=None,  help='directory of images')
+    parser.add_argument('--config_file', default='config.yaml', help='yaml config file')
     parser.add_argument('--o',help='output mosaic file', default='mosaic.fits')
     parser.add_argument('--c',help='Comment')
     parser.add_argument('--bkcor', help='whether or not to do background correction', action='store_true')
@@ -114,13 +115,21 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    #print(f'Input files: {args.image_fits}')
+    with open(args.config_file, "r") as f:
+        config = yaml.safe_load(f)
+    config = config['SubaruReduction']
+    
+    # Command line overrides YAML
+    image_fits_dir = args.image_dir if args.image_dir is not None else config["warpdir"]
+    image_fits_dir = os.path.expanduser(image_fits_dir)
+
+    print(f'Input file directory: {image_fits_dir}')
     print(f'Output file: {args.o}')
     print(f'Background correction: {args.bkcor}')
     print(f'Comment: {args.c}')
 
 
-    ifc = ImageFileCollection(args.image_dir, fitskwlist)
+    ifc = ImageFileCollection(image_fits_dir, fitskwlist)
     print(ifc.summary)
 
     if args.bkcor:

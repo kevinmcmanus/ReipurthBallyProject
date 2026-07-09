@@ -107,21 +107,28 @@ def get_gaia_data(imgpath, xmatch_file):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='creates Gaia catalog for each frame')
     parser.add_argument('--config_file', help='name of this object')
-
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume processing from the previous run."
+)
     args = parser.parse_args()
+    resuming = args.resume
+
     with open(args.config_file,'r') as f:
         config = yaml.safe_load(f)
 
     config = config['SubaruReduction']
     
-    caldir = config['caldir']
+    regdir = config['regdir']
     gaiacatdir = config['gaiacatdir']
     maxmag = config.pop('maxmag', 33) # gets 'em all by default
 
     #fix up output directory
-    if os.path.exists(gaiacatdir):
-        shutil.rmtree(gaiacatdir)
-    os.mkdir(gaiacatdir)
+    if not resuming:
+        if os.path.exists(gaiacatdir):
+            shutil.rmtree(gaiacatdir)
+        os.mkdir(gaiacatdir)
     
     #set up gaia query
     mag_str = f'{maxmag}'
@@ -139,12 +146,15 @@ if __name__ == "__main__":
     # assert scr2 is not None
 
 
-    im_collection =  ImageFileCollection(caldir)
+    im_collection =  ImageFileCollection(regdir)
 
     for imgname in im_collection.files:
-        inpath = os.path.join(caldir, imgname)
+        inpath = os.path.join(regdir, imgname)
         name_root = os.path.splitext(imgname)
         outpath = os.path.join(gaiacatdir, name_root[0]+'.xml')
+
+        if resuming and os.path.exists(outpath): continue
+        
         print(f'Input: {inpath}, xmatch file: {outpath}')
         get_gaia_data(inpath, outpath)
         print()

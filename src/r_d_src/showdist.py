@@ -9,42 +9,19 @@ import matplotlib.gridspec as gs
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 
-from astropy.io.votable import parse_single_table
-def load_catalog(cat_path, indexcol=None):
-    # cat_path = os.path.join(self.dirs['xmatch_tables'], img_name+'.xml')
-    try:
-        catalog = parse_single_table(cat_path).to_table()
+sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
+from warp import get_srcdest
 
-    except:
-        catalog = None
+def getdistortion(regdir, frameid):
 
-    if indexcol is not None:
-        catalog.add_index(indexcol)
+    regpath = os.path.join(regdir, frameid)
+    src_xy, dest_xy = get_srcdest(regpath)
 
-    return  catalog
-
-def getdistortion(obsdir, frameid):
-    #get the two catalogs
-    gaia_cat = load_catalog(os.path.join(obsdir, 'gaiacat',frameid+'.xml'))
-    obj_cat = load_catalog(os.path.join(obsdir, 'objcat',frameid+'.xml'))
-
-    # get the matcher
-    catmatch_pd = pd.read_csv(os.path.join(obsdir,'handmatch', frameid+'.mtch'), sep='\s+', comment='#', names=['obj_num', 'gaia_num'])
-    catmatch_pd['objid'] = [f'obj-{i:04d}' for i in catmatch_pd.obj_num]
-    catmatch_pd['gaiaid'] = [f'gaia-{i:04d}' for i in catmatch_pd.gaia_num]
-    catmatch = Table.from_pandas(catmatch_pd)
-
-    # join the three tables together
-    matched_cat = join(join(obj_cat, catmatch, keys='objid'), gaia_cat, keys='gaiaid')
-    matched_cat['matchid'] = [f'match-{i:04d}' for i in range(len(matched_cat))]
-    matched_cat.add_index('matchid')
-
-    xy = np.array([matched_cat['x'], matched_cat['y']]).T
-    dx = np.array(matched_cat['x_obsdate']- matched_cat['x'])
-    dy = np.array(matched_cat['y_obsdate']- matched_cat['y'])
+    dx = dest_xy[:,0] - src_xy[:,0]
+    dy = dest_xy[:,1] - src_xy[:,1]
     dist = np.sqrt(dx**2+dy**2)
 
-    return xy, dx, dy, dist
+    return src_xy, dx, dy, dist
 
 frames = {0:(6,'chihiro'), 1: (7, 'clarisse'), 2:(2, 'fio'), 3:(1, 'kiki'), 4:(0, 'nausicaa'), #top row
           5:(8,'ponyo'), 6:(9,'san'), 7:(5, 'satsuki'), 8:(4,'sheeta'), 9:(3,'sophie')} #bottom row
@@ -55,24 +32,21 @@ if __name__ == '__main__':
     # parser.add_argument('frameid', help='Frame id, e.g. SUPA01469983')
     # parser.add_argument('--darkdir',help='directory containing master DARK fits file')
     # parser.add_argument('--destdir',help='directory where to put calibrated frames')
-    parser.add_argument('filename', help='distortion files')
+    parser.add_argument('matchregdir', help='matchregion directory')
+    parser.add_argument('expid', help='exposure id')
 
     
 
     args = parser.parse_args()
-    fname = args.filename
-
-    dirname = os.path.dirname(fname)
-    obsdir = os.path.dirname(dirname)
-    frameroot = os.path.splitext(os.path.basename(fname))[0]
-    frameroot = frameroot[0:len(frameroot)-1]
+    matchregdir = args.matchregdir
+    expid = args.expid
 
     distmaps = {}
     for f in frames:
         finfo = frames[f]
         frameno = finfo[0]
-        frameid = frameroot+str(frameno)
-        xy, dx, dy, dist = getdistortion(obsdir, frameid)
+        frameid = f'{expid}{frameno}_init.reg'
+        xy, dx, dy, dist = getdistortion(matchregdir, frameid)
         distmaps[f]={'xy':xy, 'dx':dx, 'dy':dy, 'dist':dist}
     
     alldist = np.concatenate([distmaps[m]['dist'] for m in distmaps])
@@ -100,7 +74,7 @@ if __name__ == '__main__':
         dm = distmaps[m]
         pcm=ax.quiver(dm['xy'][:,0], dm['xy'][:,1], dm['dx'], dm['dy'],
                       color=cmap(norm(dm['dist'])))
-        ax.set_title(f'Detector: {frames[i][1]}')
+        ax.set_title(f'Detector: {frames[i][1]}, Id: {frames[i][0]}')
     
     #tack on colorbar across bottom
     cax = fig.add_subplot(grid[2,:])

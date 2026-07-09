@@ -64,7 +64,7 @@ if __name__ == '__main__':
         config = yaml.safe_load(f)
 
     config = config['SubaruReduction']
-    caldir = config.pop('caldir')
+    regdir = config.pop('regdir')
     objcatdir = config.pop('objcatdir')
     gaiacatdir = config.pop('gaiacatdir')
     warpdir = config.pop('warpdir')
@@ -76,13 +76,13 @@ if __name__ == '__main__':
             shutil.rmtree(dir)
         os.mkdir(dir)
 
-    #loop through the calibrated images
+    #loop through the registered images
     #and for those that have a match catalog
     #warp 'em and save the result in warpdir
 
-    im_collection=ImageFileCollection(caldir)
+    im_collection=ImageFileCollection(regdir)
     for calimage in im_collection.files:
-        impath = os.path.join(caldir, calimage)
+        impath = os.path.join(regdir, calimage)
         hdr, img = ci.get_fits(impath)
         frameid = hdr['FRAMEID']
         detector = hdr['DETECTOR']
@@ -99,7 +99,7 @@ if __name__ == '__main__':
 
         hdr['NAXIS2'] = 4273
         hdr['NAXIS1'] = 2272
-        hdr['DATA-TYP'] = 'REGISTRD'
+        hdr['DATA-TYP'] = 'WARPED'
         phdu = fits.PrimaryHDU(data = img_new, header=hdr)
 
         out_path = os.path.join(warpdir, frameid+'.fits')

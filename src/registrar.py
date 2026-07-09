@@ -91,5 +91,6 @@ class registrar:
         hdr['CRPIX2'] = int(target_pix[1])+1
         hdr['CRVAL1'] = self.targetCoord.ra.value
         hdr['CRVAL2'] = self.targetCoord.dec.value
+        hdr['DATA-TYP'] = 'REGISTRD'
 
         return hdr, data
