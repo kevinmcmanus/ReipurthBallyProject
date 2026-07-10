@@ -1,4 +1,5 @@
 import os,sys
+from pathlib import Path
 
 from astropy.io import fits, ascii
 from astropy.time import Time
@@ -119,9 +120,9 @@ if __name__ == '__main__':
         config = yaml.safe_load(f)
     config = config['SubaruReduction']
     
-    # Command line overrides YAML
-    image_fits_dir = args.image_dir if args.image_dir is not None else config["warpdir"]
-    image_fits_dir = os.path.expanduser(image_fits_dir)
+    # Command line overrides YAML, use the warp directory out of the YAML
+    fits_dir = args.image_dir if args.image_dir is not None else config["warpdir"]
+    image_fits_dir = Path(fits_dir).expanduser().resolve(strict=True)
 
     print(f'Input file directory: {image_fits_dir}')
     print(f'Output file: {args.o}')
