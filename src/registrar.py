@@ -79,7 +79,7 @@ class registrar:
 
         frameID = hdr['FRAMEID']
         dist = np.sqrt(((framePixPredict-framePixActual)**2).sum())
-        print(f'{frameID}, distance: {dist} pixels')
+        #print(f'{frameID}, distance: {dist} pixels')
 
         # set the frame wcs and then find the target in it
         w.wcs.crpix = framePixActual 
@@ -93,4 +93,4 @@ class registrar:
         hdr['CRVAL2'] = self.targetCoord.dec.value
         hdr['DATA-TYP'] = 'REGISTRD'
 
-        return hdr, data
+        return hdr, data, dist

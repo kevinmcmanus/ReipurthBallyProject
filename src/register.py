@@ -43,12 +43,14 @@ if __name__ == '__main__':
     for fin in im_collection.files_filtered(include_path=True):
         bn = os.path.basename(fin)
         fout = os.path.join(regdir, bn)
-        print(f'Input: {fin}')
+        #print(f'Input: {fin}')
 
         hdr, data = ci.get_fits(fin)
 
-        new_hdr, new_data = reg.register(hdr, data)
+        new_hdr, new_data, dist = reg.register(hdr, data)
 
         phdu = fits.PrimaryHDU(data = new_data,
                                 header=new_hdr)
         phdu.writeto(fout, overwrite=True)
+
+        print(f'File: {bn}, object distance: {dist:.3f} pixels')

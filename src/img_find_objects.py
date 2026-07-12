@@ -29,7 +29,6 @@ def find_stars(frameid, hdr, data,  mask, regout=None, thresh = 50,
     img_sub = img_data - bkg_img
     objects = sep.extract(img_sub, thresh, mask=mask, err=bkg_img)# err=img_bkg.globalrms)
 
-    print(f'{frameid}: Number of objects identified: {len(objects)}')
     objects_tbl = Table(objects, meta={'ExtractionThreshold': thresh, 'err': img_bkg.globalrms})
 
     if regout is not None:
@@ -96,4 +95,7 @@ if __name__ == '__main__':
         _, mask = ci.get_fits(mask_name)
         dest_name = os.path.join(objcatdir, frame_name+'.xml')
 
-        find_stars(frame_name, hdr, data, mask.astype(bool), regout=dest_name, thresh=thresh)
+        obj_tbl  = find_stars(frame_name, hdr, data, mask.astype(bool), regout=dest_name, thresh=thresh)
+        nobj = len(obj_tbl)
+        
+        print(f'{frame_name}: Number of objects identified: {nobj}')
