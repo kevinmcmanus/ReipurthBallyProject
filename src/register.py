@@ -40,6 +40,7 @@ if __name__ == '__main__':
 
     # register each file in the collection,
     # write the result to the registration directory
+    results = []
     for fin in im_collection.files_filtered(include_path=True):
         bn = os.path.basename(fin)
         fout = os.path.join(regdir, bn)
@@ -47,10 +48,19 @@ if __name__ == '__main__':
 
         hdr, data = ci.get_fits(fin)
 
-        new_hdr, new_data, dist = reg.register(hdr, data)
+        new_hdr, new_data, result = reg.register(hdr, data)
+
+        results.append(result)
 
         phdu = fits.PrimaryHDU(data = new_data,
                                 header=new_hdr)
         phdu.writeto(fout, overwrite=True)
 
-        print(f'File: {bn}, object distance: {dist:.3f} pixels')
+    resultdf = pd.DataFrame(results).pivot(index='detector',
+                                            columns='exposure',
+                                            values='distance' )
+    
+    print('*** Results ***')
+    print(resultdf)
+
+    

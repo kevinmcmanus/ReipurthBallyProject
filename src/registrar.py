@@ -93,4 +93,6 @@ class registrar:
         hdr['CRVAL2'] = self.targetCoord.dec.value
         hdr['DATA-TYP'] = 'REGISTRD'
 
-        return hdr, data, dist
+        result =  {'detector':hdr['DETECTOR'], 'exposure': hdr['EXP-ID'], 'distance':dist}
+
+        return hdr, data, result
