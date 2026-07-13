@@ -49,7 +49,7 @@ def auto_pair(config, frameid, detector, params):
     obj_cat = load_catalog(os.path.join(objcatdir,frameid+'.xml'), index_col=None)
 
     N_gaia = len(gaia_cat)
-    print(f'N Objects: {len(obj_cat)}, N Gaia: {N_gaia}')
+    #print(f'N Objects: {len(obj_cat)}, N Gaia: {N_gaia}')
     #update the gaia catalogs x,y positions wrt frame's wcs
     update_gaia_xy(config, frameid, gaia_cat)
 
@@ -81,8 +81,8 @@ def auto_pair(config, frameid, detector, params):
     validgaia = criteria.prod(axis=0).astype(bool)
     gaia_cat = gaia_cat[validgaia]
 
-    print(f'Object catalog trimmed from {len(obj_cat)} to {len(obj_fit)} rows)')
-    print(f'Gaia catalog trimmed from {N_gaia} to {len(gaia_cat)} rows)')
+    # print(f'Object catalog trimmed from {len(obj_cat)} to {len(obj_fit)} rows)')
+    # print(f'Gaia catalog trimmed from {N_gaia} to {len(gaia_cat)} rows)')
 
     # find the best partner for each object and update the obj_fit table
     best_gaia = np.array([find_best_gaia(o, obj_fit, gaia_cat, gaia_rad=params['gaia_rad']) for o in obj_fit])
@@ -111,7 +111,8 @@ def auto_pair(config, frameid, detector, params):
     et = t_end-t_start
     npairs = len(resids)
 
-    return [frameid, detector, npairs, RMSE, et]
+    return {'frameid':frameid, 'detector': detector,
+            'npairs':npairs, 'RMSE':RMSE, 'et': et}
 
 
 def find_best_gaia(obj, obj_cat, gaia_cat, gaia_rad=200):
@@ -242,21 +243,32 @@ if __name__ == '__main__':
 
     restbl = Table(names = ['FrameID', 'Detector', 'NPairs', 'RMSE','ElapsedTime'],
                    dtype=['S12', 'S12', 'i4', 'f4', 'f4'])
-    for calimage in files:
+    results = []
+    for fileno, calimage in enumerate(files):
   
         impath = os.path.join(regdir, calimage)
         hdr, img = ci.get_fits(impath)
         frameid = hdr['FRAMEID']
         detector = hdr['DETECTOR']
+        exposure = hdr['EXP-ID']
 
+        if fileno % 10 == 0:
+            print(f'Processing {frameid}...')
         #skip this frame if we've already done it
         if resuming and os.path.exists(
             os.path.join(regiondir, frameid+'.reg')): continue
         
-        reslist = auto_pair(config, frameid, detector, params)
-        print('Frame ID: {}, Detector: {}, N Pairs: {}, RMSE: {:.3f}, Elapsed time: {:.1f} seconds'.format(*reslist))
-        restbl.add_row(reslist)
+        resdict = auto_pair(config, frameid, detector, params)
+        resdict['exposure'] = exposure
+        results.append(resdict)
 
-
-    if resout is not None:
-        restbl.write(resout, format = 'ascii', overwrite=True)
+    results_df = pd.DataFrame(results).pivot(index='detector',
+                                             columns='exposure',
+                                             values=['RMSE','npairs'])
+    print()
+    print('*** Number of Pairs')
+    print(results_df['npairs'])
+    print()
+    print('*** RMSE')
+    print(results_df['RMSE'])
+ 

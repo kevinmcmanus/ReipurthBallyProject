@@ -41,10 +41,13 @@ if __name__ == '__main__':
     # register each file in the collection,
     # write the result to the registration directory
     results = []
-    for fin in im_collection.files_filtered(include_path=True):
+    for fileno, fin in enumerate(im_collection.files_filtered(include_path=True)):
         bn = os.path.basename(fin)
         fout = os.path.join(regdir, bn)
+
         #print(f'Input: {fin}')
+        if fileno % 10 == 0:
+            print(f'Processing {bn}...')
 
         hdr, data = ci.get_fits(fin)
 

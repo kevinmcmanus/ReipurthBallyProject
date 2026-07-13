@@ -1,6 +1,6 @@
 import os, sys, shutil
 import argparse
-import numpy as np
+import numpy as np, pandas as pd
 
 import yaml
 
@@ -89,16 +89,25 @@ if __name__ == '__main__':
     if len(im_files) == 0:
         raise ValueError(f'No calibrated frames found in {regdir}')
     
-    for frame in im_files:
+    resultlist = []
+    for fileno, frame in enumerate(im_files):
 
         hdr, data = ci.get_fits(frame)
         frame_name = hdr['FRAMEID']
         detector = hdr['DETECTOR']
+        exposure = hdr['EXP-ID']
+        if fileno % 10 == 0:
+            print(f'Processing {frame_name} ...')
         mask_name = os.path.join(maskdir, detector+'_mask.fits')
         _, mask = ci.get_fits(mask_name)
         dest_name = os.path.join(objcatdir, frame_name+'.xml')
 
         obj_tbl  = find_stars(frame_name, hdr, data, mask.astype(bool), regout=dest_name, thresh=thresh)
         nobj = len(obj_tbl)
+        resultlist.append({'exposure': exposure, 'detector':detector, 'nobj':nobj})
         
-        print(f'{frame_name}: Number of objects identified: {nobj}')
+    result_df = pd.DataFrame(resultlist).pivot(index='detector',
+                                               columns='exposure',
+                                               values = 'nobj')
+    print('\n*** Number of Objects Found')   
+    print(result_df)
