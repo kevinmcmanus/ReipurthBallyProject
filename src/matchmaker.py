@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 
 import yaml
-import warnings
+import warnings, logging
 
 from astropy.table import Table, join
 from astropy.io import fits
@@ -35,6 +35,8 @@ defaults_types = {'horiz_margin': 'int', 'vert_margin': 'int',
             'max_ecc': 'float',
             'gaia_rad': 'int',
             'cat_min_gmag': 'float', 'cat_min_rpmag':'float', 'cat_min_bpmag':'float'}
+
+logger = logging.getLogger('matchmaker')
 
 def auto_pair(config, frameid, detector, params):
 
@@ -85,7 +87,7 @@ def auto_pair(config, frameid, detector, params):
     # print(f'Gaia catalog trimmed from {N_gaia} to {len(gaia_cat)} rows)')
 
     # find the best partner for each object and update the obj_fit table
-    best_gaia = np.array([find_best_gaia(o, obj_fit, gaia_cat, gaia_rad=params['gaia_rad']) for o in obj_fit])
+    best_gaia = np.array([find_best_gaia(frameid, o, obj_fit, gaia_cat, gaia_rad=params['gaia_rad']) for o in obj_fit])
     # delete the rows out of obj_fit for which there's no best gaia:
     obj_fit['gaiaid'] = best_gaia
     no_match = np.where(best_gaia == 'NoMatch')[0]
@@ -115,7 +117,8 @@ def auto_pair(config, frameid, detector, params):
             'npairs':npairs, 'RMSE':RMSE, 'et': et}
 
 
-def find_best_gaia(obj, obj_cat, gaia_cat, gaia_rad=200):
+def find_best_gaia(frameid, obj, obj_cat, gaia_cat, gaia_rad=200):
+    objid = obj['objid']
     obj_xy = np.array([obj['x'], obj['y']])
     # distance from obj to all other obj_cat members:
     dists = calc_distance(obj_cat,obj_xy, ('x','y'))
@@ -140,7 +143,6 @@ def find_best_gaia(obj, obj_cat, gaia_cat, gaia_rad=200):
                       for o in offsets] for n in neighbors])
     #print(f'Neighbors: {n_neighbors}, Gaia: {n_gaia}, dist shape: {dists.shape}')
     if dists.shape != (n_neighbors, n_gaia):
-        objid = obj['objid']
         raise ValueError(f'Shapes not equal; dists.shape {dists.shape}, expected {(n_neighbors, n_gaia)}, objid: {objid}')
     
     #rmse for each candidate gaia obj
@@ -150,9 +152,14 @@ def find_best_gaia(obj, obj_cat, gaia_cat, gaia_rad=200):
     # find the gaia obj with the least rmse
     if len(rmse) == 0:
         gaiaid = 'NoMatch'
+        logger.warning('frameid: %s, object: %s, No match found', frameid, objid)
     else:
         rmse_min_i = rmse.argmin()
         gaiaid = gaia_cat[near_gaia][rmse_min_i]['gaiaid']
+        rmse_min = rmse[rmse_min_i]
+        if rmse_min >= 25:
+            logger.warning('frameid: %s,  object: %s, min RMSE is %.2f pixels',
+                          frameid, objid, rmse_min)
     #print(f'Min rmse: {rmse[rmse_min_i]}')
 
     return gaiaid
@@ -208,7 +215,8 @@ if __name__ == '__main__':
         v = apparams.pop(p, defaults[p])
         #print(type(__builtins__))
         params[p] = getattr(__builtins__, defaults_types[p])(v)
-        #params[p] = (__builtins__[defaults_types[p]])(v)
+        # this is the form needed when running in the debugger (?)
+        # params[p] = (__builtins__[defaults_types[p]])(v)
     if len(apparams) != 0:
         raise ValueError('Invalid pairing param in yaml file')
     # now get the params from command line
@@ -241,6 +249,9 @@ if __name__ == '__main__':
         im_collection=ccdp.ImageFileCollection(regdir)
         files = im_collection.files
 
+    logging.basicConfig(level=logging.INFO,
+                        format='%(message)s')
+    
     restbl = Table(names = ['FrameID', 'Detector', 'NPairs', 'RMSE','ElapsedTime'],
                    dtype=['S12', 'S12', 'i4', 'f4', 'f4'])
     results = []
@@ -249,7 +260,7 @@ if __name__ == '__main__':
         impath = os.path.join(regdir, calimage)
         hdr, img = ci.get_fits(impath)
         frameid = hdr['FRAMEID']
-        detector = hdr['DETECTOR']
+        detector = str(hdr['DET-ID'])+'-'+hdr['DETECTOR']
         exposure = hdr['EXP-ID']
 
         if fileno % 10 == 0:

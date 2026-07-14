@@ -58,13 +58,13 @@
         },
                 
         {
-            "name": "Python: autopair",
+            "name": "Python: matchmaker",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args":["--config_file", "/home/kevin/Observations/ZCMa-test/W-S-I+/config.yaml"
+            "args":["--config_file", "/home/kevin/Observations/M8/N-A-L656/M8-N-A-L656.yaml"
 
             ]
 
@@ -76,7 +76,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args":["--config_file", "/home/kevin/Observations/ZCMa-test/W-S-I+/config.yaml",
+            "args":["--config_file", "/home/kevin/Observations/M8/N-A-L656/M8-N-A-L656.yaml",
                     "--o", "junk.fits",
 
             ],
