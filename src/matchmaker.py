@@ -28,12 +28,14 @@ defaults = {'horiz_margin': 10, 'vert_margin': 10,
             'min_flux':50000, 'max_flux':300000,
             'max_ecc': 0.75,
             'gaia_rad': 200,
+            'warn_len': 30000000, #default no warnings
             'cat_min_gmag': 30., 'cat_min_rpmag':30., 'cat_min_bpmag':30.}
 defaults_types = {'horiz_margin': 'int', 'vert_margin': 'int',
             'min_pix':'int', 'max_pix': 'int',
             'min_flux':'int', 'max_flux': 'int',
             'max_ecc': 'float',
             'gaia_rad': 'int',
+            'warn_len': 'int',
             'cat_min_gmag': 'float', 'cat_min_rpmag':'float', 'cat_min_bpmag':'float'}
 
 logger = logging.getLogger('matchmaker')
@@ -99,8 +101,19 @@ def auto_pair(config, frameid, detector, params):
         obj_fit = join(obj_fit, gaia_cat, keys='gaiaid')
 
     reg_path = os.path.join(regiondir, frameid+'.reg')
-    match_to_regvec(obj_fit,src_xy=('x','y'), dest_xy=('x_obsdate', 'y_obsdate'),
+    lengths = match_to_regvec(obj_fit,src_xy=('x','y'), dest_xy=('x_obsdate', 'y_obsdate'),
                     reg_path = reg_path, color='cyan', troot=None)
+    
+    # warn about long vectors
+    warn_len = params['warn_len']
+    too_long = np.where(lengths >= warn_len)[0]
+    for i in too_long:
+            logger.warning('frameid: %s,  object: %s, gaia_id: %s, vector length: %.2f ',
+                          frameid,
+                          obj_fit['objid'][i],
+                          obj_fit['gaiaid'][i],
+                          lengths[i])
+    if len(too_long > 0): print()
     
     # calc summary stats
     # transform every member of the object catalog
@@ -156,10 +169,7 @@ def find_best_gaia(frameid, obj, obj_cat, gaia_cat, gaia_rad=200):
     else:
         rmse_min_i = rmse.argmin()
         gaiaid = gaia_cat[near_gaia][rmse_min_i]['gaiaid']
-        rmse_min = rmse[rmse_min_i]
-        if rmse_min >= 25:
-            logger.warning('frameid: %s,  object: %s, min RMSE is %.2f pixels',
-                          frameid, objid, rmse_min)
+
     #print(f'Min rmse: {rmse[rmse_min_i]}')
 
     return gaiaid

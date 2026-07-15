@@ -1,7 +1,9 @@
 import numpy as np, pandas as pd
 
 
-def match_to_regvec(match_tbl, src_xy, dest_xy, reg_path, color='red',troot='m'):
+def match_to_regvec(match_tbl, src_xy, dest_xy,
+                    reg_path, color='red',troot='m',
+                    ):
     """
     writes a ds9 vector region file
     """
@@ -38,6 +40,8 @@ def match_to_regvec(match_tbl, src_xy, dest_xy, reg_path, color='red',troot='m')
                 title = '{' + f'{troot}-{i:04d}' + '}'
                 vecstr += f' text={title}'
             reg.write(vecstr+'\n')
+
+    return lengths
 
 def regvec_to_match(regfile, src_xy=('x','y'), dest_xy=('dest_x', 'dest_y')):
     def parse_vecline(line, src_xy, dest_xy):
