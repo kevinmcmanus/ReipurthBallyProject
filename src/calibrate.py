@@ -23,7 +23,14 @@ from astropy.wcs import WCS
 
 import yaml
 
-import warnings
+
+import warnings, logging
+logger = logging.getLogger('calibrate')
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s: %(message)s"
+)
+
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 
 import chan_info as ci
@@ -88,11 +95,7 @@ def scale_dark(dark_hdr, dark_data, bias_data, exptime):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='dark corrects image files')
-    # parser.add_argument('fitsdir', help='directory of frame fits files to be calibrated')
-    # parser.add_argument('--biasdir', help='directory containing master BIAS fits file')
-    # parser.add_argument('--darkdir',help='directory containing master DARK fits file')
-    # parser.add_argument('--caldir',help='directory where to put calibrated frames')
-    # parser.add_argument('--filter',help='which filter', default='W-S-I+')
+
     parser.add_argument('--config_file', help='Calibration Configuration YAML')
 
     args = parser.parse_args()
@@ -121,11 +124,15 @@ if __name__ == '__main__':
     for fin in im_frames.files:
         bn = os.path.basename(fin)
         fout = os.path.join(caldir, bn)
-        print(f'Input: {fin}')
 
         frame_hdr, frame_data = get_fits(fin)
 
         detector = frame_hdr['DETECTOR']
+        frameid =  frame_hdr['FRAMEID']
+        
+        logger.info('Calibrating frameid: %s,  Detector: %s',
+                    frameid, detector) 
+                    
         biaspath = os.path.join(biasdir, detector+'.fits')
         darkpath = os.path.join(darkdir, detector+'.fits')
         if flatdir is not None:
@@ -160,5 +167,4 @@ if __name__ == '__main__':
                                 header=new_hdr)
 
         phdu.writeto(fout, overwrite=True)
-        print(f'Output: {fout}')
-        print()
+
