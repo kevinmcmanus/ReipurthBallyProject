@@ -26,6 +26,7 @@ if __name__ == '__main__':
     caldir = config.pop('caldir')
     regdir = config.pop('regdir')
     registry = config.pop('registry')
+    extraction_thresh = config.pop('thresh')
 
 
     #fix up output directory
@@ -51,7 +52,7 @@ if __name__ == '__main__':
 
         hdr, data = ci.get_fits(fin)
 
-        new_hdr, new_data, result = reg.register(hdr, data)
+        new_hdr, new_data, result = reg.register(hdr, data, thresh=extraction_thresh)
 
         results.append(result)
 

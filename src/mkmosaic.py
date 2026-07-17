@@ -25,8 +25,8 @@ import argparse, yaml
 from MontagePy.main import mImgtbl, mMakeHdr, mProjExec, mAdd
 
 #these fields extracted from last fits header to go in the output file
-fitskwlist = ['EXP-ID', 'FRAMEID', 'DATE-OBS', 'OBSERVER', 'OBJECT', 'EXPTIME', 'DATE-OBS',
-             'BUNIT', 'PROP-ID', 'FILTER01', 'INSTRUME','DETECTOR', 'DET-ID']
+fitskwlist = ['EXP-ID',  'DATE-OBS', 'OBSERVER', 'OBJECT', 'EXPTIME', 
+             'FILTER01', 'DETECTOR']
 
 def pick_a_spot(fitspath, box_sz=200):
     """
@@ -153,7 +153,7 @@ if __name__ == '__main__':
                 normalize_background(src, bkg, dst)
             else:
                 os.symlink(src, dst)
-            print(f'src: {src}, dst: {dst}')
+            #print(f'src: {src}, dst: {dst}')
 
         # get a copy of the last file's header
         with fits.open(src) as f:

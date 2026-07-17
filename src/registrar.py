@@ -54,7 +54,7 @@ class registrar:
         dist2 = (offsets**2).sum(axis=1)
         return dist2.argmin()
     
-    def register(self, hdr, data):
+    def register(self, hdr, data, thresh=5):
         reginfo = self.objdf.loc[hdr['DETECTOR']]
 
         #predict the ref object's pixel coords in current frame
@@ -69,19 +69,19 @@ class registrar:
         # snap to  the star in the frame that's closest to the predicted position
         # TODO remove hard coding of thresh-- needs to be consistent with img_find_objects
         # TODO deal with mask param 
-        obj_tbl = find_stars(frameid=None, hdr=hdr, thresh=5,
+        obj_tbl = find_stars(frameid=None, hdr=hdr, thresh=thresh,
                               data=data, mask=None, byteswap=False)
         obj_i = self.__find_closest(obj_tbl, framePixPredict)
 
         # need the coords of the object thus found
         framePixActual = np.array([obj_tbl['x'][obj_i], obj_tbl['y'][obj_i]])
-        framePixActual += 1 #back to ds9/fits indexing
 
         frameID = hdr['FRAMEID']
         dist = np.sqrt(((framePixPredict-framePixActual)**2).sum())
         #print(f'{frameID}, distance: {dist} pixels')
 
         # set the frame wcs and then find the target in it
+        framePixActual += 1 #back to ds9/fits indexing
         w.wcs.crpix = framePixActual 
         w.wcs.crval = np.array([reginfo.gaiaCRVAL1, reginfo.gaiaCRVAL2])
 
