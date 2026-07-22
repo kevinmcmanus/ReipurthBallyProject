@@ -18,6 +18,8 @@ from scipy.ndimage import convolve
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src/r_d_src'))
 
+import chan_info as ci
+
 from utils import obs_dirs, preserveold
 import warnings
 
@@ -32,10 +34,13 @@ def pick_a_spot(fitspath, box_sz=200):
     """
     calculates ra, dec of lower left corner for square box boxsz on a side
     """
-    with fits.open(fitspath) as f:
-        hdr = f[0].header
-        x_pix = hdr['NAXIS1']/2 - box_sz/2
-        y_pix = hdr['NAXIS2']/2 - box_sz/2
+
+    hdr,_ = ci.get_fits(fitspath)
+
+    x_pix = hdr['NAXIS1']/2 - box_sz/2
+    y_pix = hdr['NAXIS2']/2 - box_sz/2
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
         wcs = WCS(hdr)
 
     ra, dec = wcs.pixel_to_world_values(x_pix, y_pix)
@@ -50,23 +55,25 @@ def est_bkg(fitspath, ra, dec, box_sz=200):
     """
 
     sigma_clip = SigmaClip(sigma=3.0)
-    bkg = MedianBackground(sigma_clip)
+    bkg = MedianBackground(sigma_clip=sigma_clip)
 
-    with fits.open(fitspath) as f:
-        hdr = f[0].header
-        wcs = WCS(hdr)
-        expID = hdr['EXP-ID']
-        frameID = hdr['FRAMEID']
+    hdr, data = ci.get_fits(fitspath)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        wcs = WCS(hdr)    
 
-        #pixel coords for lower ra, dec, assumed to be lower left corner
-        row_pix, col_pix = wcs.world_to_array_index_values(ra, dec)
+    expID = hdr['EXP-ID']
+    frameID = hdr['FRAMEID']
 
-        #slicers for the box
-        row_slice = slice(row_pix.item(), row_pix.item()+box_sz)
-        col_slice = slice(col_pix.item(), col_pix.item()+box_sz)
+    #pixel coords for lower ra, dec, assumed to be lower left corner
+    row_pix, col_pix = wcs.world_to_array_index_values(ra, dec)
 
-        #median flux in the box
-        estbkg = bkg.calc_background(f[0].data[row_slice, col_slice])
+    #slicers for the box
+    row_slice = slice(row_pix.item(), row_pix.item()+box_sz)
+    col_slice = slice(col_pix.item(), col_pix.item()+box_sz)
+
+    #median flux in the box
+    estbkg = bkg.calc_background(data[row_slice, col_slice])
 
     return {'row_pix':row_pix, 'col_pix': col_pix, 'EXP-ID':expID, 'FRAMEID': frameID, 'ESTBKG': estbkg}
 
@@ -89,9 +96,8 @@ def estimate_background(ifc, detector='satsuki', box_sz=200):
 
 
 def normalize_background(fitsin, bkg, fitsout):
-    with fits.open(fitsin) as fin:
-        hdr = fin[0].header.copy()
-        img = fin[0].data.copy()
+
+    hdr, img = ci.get_fits(fitsin)
 
     minbkg = bkg.ESTBKG.min()
     expID = hdr['EXP-ID']
@@ -100,9 +106,9 @@ def normalize_background(fitsin, bkg, fitsout):
     phdu = fits.PrimaryHDU(data = img, header = hdr)
     phdu.writeto(fitsout, overwrite=True)
 
-def global_background(fitslist):
-    bkg = pd.DataFrame([estimate_background(f) for f in fitslist]).set_index('frameID')
-    return bkg
+# def global_background(fitslist):
+#     bkg = pd.DataFrame([estimate_background(f) for f in fitslist]).set_index('frameID')
+#     return bkg
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='creates mosaic from list of files')
@@ -187,15 +193,17 @@ if __name__ == '__main__':
 
         #coadd into a temp file
         outfile = os.path.join(tempdir, os.path.basename(args.o))
-        rtn = mAdd(projdir, pimage_tbl,  hdrfile, outfile, coadd=1)
+
+        coadd = 1 # median combine
+        rtn = mAdd(projdir, pimage_tbl,  hdrfile, outfile, coadd=coadd)
+
         print(f'mAdd returned: {rtn}')
         if rtn['status'] != '0': exit(int(rtn['status']))
         
         #Fix up the resulting mosaic
-        # convert to single precision
-        with fits.open(outfile) as f:
-            img_hdr=f[0].header.copy()
-            img_data = f[0].data.astype(np.float32)
+        # convert to single precision (get_fits does this)
+
+        img_hdr, img_data = ci.get_fits(outfile)
 
         # Update the header with values from last input fits
         for kw in fitskwlist:

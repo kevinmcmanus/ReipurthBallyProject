@@ -95,7 +95,9 @@ if __name__ == '__main__':
         # inverse transform needed; so swap src, dest as below
         xform = sk.transform.estimate_transform('polynomial', dest, src, order=3)
 
-        img_new = sk.transform.warp(img, xform, cval=bkg.globalback, output_shape=(4273, 2272))
+        #cval = bkg.globalback
+        cval = np.nan
+        img_new = sk.transform.warp(img, xform, cval=np.nan, output_shape=(4273, 2272))
 
         hdr['NAXIS2'] = 4273
         hdr['NAXIS1'] = 2272
