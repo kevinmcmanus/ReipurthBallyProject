@@ -31,11 +31,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='dark corrects image files')
     parser.add_argument('fitsdir', help='directory of frame fits files to be viewed')
     parser.add_argument('exp_id', help='directory containing master BIAS fits file')
+    parser.add_argument('--stretch', help='stretch factor', type=int, default=1000)
     args = parser.parse_args()
     
     fitsdir = args.fitsdir
     exp_id = args.exp_id
-
+    stretch = args.stretch
 
     frames = {}
     with warnings.catch_warnings():
@@ -53,7 +54,7 @@ if __name__ == '__main__':
 
     norm = ImageNormalize(img,
                             interval=PercentileInterval(99.5),
-                            stretch=LogStretch(1000))
+                            stretch=LogStretch(stretch))
 
     print(norm)
     fig, ax = plt.subplots(figsize=(12,8))
