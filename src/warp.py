@@ -23,46 +23,6 @@ sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 import chan_info as ci
 from catalog import *
 
-from astropy.io.votable import parse_single_table
-
-def get_srcdest(frameid, regiondir, objcatdir, gaiacatdir):
-    """
-    reads up a ds9 region file of vectors
-    and returns their enpoints
-    """
-    # protypical line in the region file:
-    # # vector(1628.552,99.596869,17.899903,52.293345) vector=1\n
-
-    regions = []
-    regfile = os.path.join(regiondir, frameid + '.reg')
-    with open(regfile) as reg:
-        # make a list of x, y, len, angle and append to the region list
-        for line in reg.readlines():
-            if not line.startswith('# vector('): continue
-
-            reg_params_str = line.split('(')[-1 ].split(')')[0]
-            param_vals = [float(v) for v in reg_params_str.split(',')]
-            regions.append(param_vals)
-
-    reg_table = Table(names=['x','y','len','theta_deg'], rows=regions)
-
-    #find the endpoints of the vectors
-    reg_table['theta_rad']= np.radians(reg_table['theta_deg'])
-    reg_table['x_prime'] = reg_table['x']+reg_table['len']*np.cos(reg_table['theta_rad'])
-    reg_table['y_prime'] = reg_table['y']+reg_table['len']*np.sin(reg_table['theta_rad'])
-
-    src_xy = np.array([reg_table['x'], reg_table['y']]).T
-    dest_xy = np.array([reg_table['x_prime'], reg_table['y_prime']]).T
-
-    # snap the coords to the nearest object in the object catalog and Gaia catalog
-    objcat = load_catalog(os.path.join(objcatdir, frameid + '.xml'))
-    gaiacat = load_catalog(os.path.join(gaiacatdir, frameid + '.xml'))
-
-    src_xy = snap_to_catalog(src_xy, objcat, ('x','y'))
-    dest_xy = snap_to_catalog(dest_xy, gaiacat, ('x_obsdate','y_obsdate'))
-
-
-    return src_xy, dest_xy
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='warps image files')

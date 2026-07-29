@@ -10,7 +10,7 @@ import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-from warp import get_srcdest
+from catalog import get_srcdest
 
 def getdistortion(regdir, frameid):
 

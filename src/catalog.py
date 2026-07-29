@@ -1,4 +1,16 @@
-import numpy as np, pandas as pd
+import os
+
+try:
+    import numpy as np
+    import pandas as pd
+except ModuleNotFoundError:  # pragma: no cover - executed in lightweight environments
+    np = None
+    pd = None
+
+try:
+    from astropy.table import Table
+except ModuleNotFoundError:  # pragma: no cover - executed in lightweight environments
+    Table = None
 
 
 def match_to_regvec(match_tbl, src_xy, dest_xy,
@@ -145,8 +157,46 @@ def coord_map(matchtbl, src_xy, dest_xy):
     return src, dest
 
 def rmse(resid):
+    if np is None:
+        raise ModuleNotFoundError("numpy is required for rmse")
     RMSE = np.sqrt((resid**2).mean())
     return RMSE
+
+
+def get_srcdest(frameid, regiondir, objcatdir, gaiacatdir):
+    """
+    Reads a ds9 region file of vectors and returns their endpoints.
+    """
+    if np is None or Table is None:
+        raise ModuleNotFoundError("numpy and astropy are required for get_srcdest")
+    regions = []
+    regfile = os.path.join(regiondir, frameid + '.reg')
+    with open(regfile) as reg:
+        for line in reg.readlines():
+            if not line.startswith('# vector('):
+                continue
+
+            reg_params_str = line.split('(')[-1].split(')')[0]
+            param_vals = [float(v) for v in reg_params_str.split(',')]
+            regions.append(param_vals)
+
+    reg_table = Table(names=['x', 'y', 'len', 'theta_deg'], rows=regions)
+
+    reg_table['theta_rad'] = np.radians(reg_table['theta_deg'])
+    reg_table['x_prime'] = reg_table['x'] + reg_table['len'] * np.cos(reg_table['theta_rad'])
+    reg_table['y_prime'] = reg_table['y'] + reg_table['len'] * np.sin(reg_table['theta_rad'])
+
+    src_xy = np.array([reg_table['x'], reg_table['y']]).T
+    dest_xy = np.array([reg_table['x_prime'], reg_table['y_prime']]).T
+
+    objcat = load_catalog(os.path.join(objcatdir, frameid + '.xml'))
+    gaiacat = load_catalog(os.path.join(gaiacatdir, frameid + '.xml'))
+
+    src_xy = snap_to_catalog(src_xy, objcat, ('x', 'y'))
+    dest_xy = snap_to_catalog(dest_xy, gaiacat, ('x_obsdate', 'y_obsdate'))
+
+    return src_xy, dest_xy
+
 
 def snap_to_catalog(obj_xy, cat, cat_xy):
     """
