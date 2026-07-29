@@ -31,6 +31,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='dark corrects image files')
     parser.add_argument('fitsdir', help='directory of frame fits files to be viewed')
     parser.add_argument('exp_id', help='directory containing master BIAS fits file')
+    parser.add_argument('--stretch', help='stretch factor,  default=1000', default=1000, type=float)
+
     args = parser.parse_args()
     
     fitsdir = args.fitsdir
