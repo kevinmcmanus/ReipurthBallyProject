@@ -46,11 +46,14 @@ if __name__ == '__main__':
         im_frames=ImageFileCollection(fitsdir, keywords=['EXP-ID', 'DETECTOR'])
         for f in im_frames.ccds(**{'EXP-ID':exp_id}):
             frames[f.header['DETECTOR']] = f.data
+            frameshape = f.data.shape
 
+    top_row_detectors = {'chihiro':'-6', 'clarisse':'-7','fio':'-2', 'kiki':'-1', 'nausicaa':'-0'}
+    bot_row_detectors = {'ponyo':'-8','san':'-9', 'satsuki':'-5', 'sheeta':'-4', 'sophie':'-3'}
 
-    top_row = np.hstack([frames[detector] for detector in ['chihiro', 'clarisse','fio', 'kiki', 'nausicaa']])
-    bot_row = np.hstack([frames[detector] for detector in ['ponyo','san', 'satsuki', 'sheeta', 'sophie']])
-    img = np.vstack([ bot_row, top_row])
+    top_row = np.hstack([frames[detector] for detector in top_row_detectors])
+    bot_row = np.hstack([frames[detector] for detector in bot_row_detectors])
+    img = np.vstack([bot_row, top_row])
     print(f'Shape: {img.shape}')
 
     norm = ImageNormalize(img,
@@ -58,7 +61,29 @@ if __name__ == '__main__':
                             stretch=LogStretch(1000))
 
     print(norm)
+
+    img_height = img.shape[0]
+    framewidth = frameshape[1]
+    halfframe = framewidth//2
     fig, ax = plt.subplots(figsize=(12,8))
     pcm = ax.imshow(img, origin='lower', cmap='gray', norm=norm)
+    for i, detector in enumerate(top_row_detectors):
+        ax.text(0.2*i+0.1, 1.01,
+                transform=ax.transAxes,
+                s=detector+top_row_detectors[detector],
+                ha='center', va='bottom', color='red')
+    for i, detector in enumerate(bot_row_detectors):
+        ax.text(0.2*i+0.1, -0.03,
+                transform=ax.transAxes,
+                s=detector+bot_row_detectors[detector],
+                ha='center', va='bottom', color='red')
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    ax.set_title(f'Exposure: {exp_id}', size=16, pad=20)
+
     fig.colorbar(pcm)
+
+    plt.tight_layout()
+
     plt.show()

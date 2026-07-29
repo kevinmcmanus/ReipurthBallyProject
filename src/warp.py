@@ -21,10 +21,11 @@ from sklearn.neighbors import LocalOutlierFactor
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 import chan_info as ci
+from catalog import *
 
 from astropy.io.votable import parse_single_table
 
-def get_srcdest(regfile):
+def get_srcdest(frameid, regiondir, objcatdir, gaiacatdir):
     """
     reads up a ds9 region file of vectors
     and returns their enpoints
@@ -33,6 +34,7 @@ def get_srcdest(regfile):
     # # vector(1628.552,99.596869,17.899903,52.293345) vector=1\n
 
     regions = []
+    regfile = os.path.join(regiondir, frameid + '.reg')
     with open(regfile) as reg:
         # make a list of x, y, len, angle and append to the region list
         for line in reg.readlines():
@@ -51,6 +53,14 @@ def get_srcdest(regfile):
 
     src_xy = np.array([reg_table['x'], reg_table['y']]).T
     dest_xy = np.array([reg_table['x_prime'], reg_table['y_prime']]).T
+
+    # snap the coords to the nearest object in the object catalog and Gaia catalog
+    objcat = load_catalog(os.path.join(objcatdir, frameid + '.xml'))
+    gaiacat = load_catalog(os.path.join(gaiacatdir, frameid + '.xml'))
+
+    src_xy = snap_to_catalog(src_xy, objcat, ('x','y'))
+    dest_xy = snap_to_catalog(dest_xy, gaiacat, ('x_obsdate','y_obsdate'))
+
 
     return src_xy, dest_xy
 
@@ -88,14 +98,14 @@ if __name__ == '__main__':
         detector = hdr['DETECTOR']
         bkg = sep.Background(img)
 
-        regionpath = os.path.join(regiondir, frameid+'.reg')
-
-        src, dest = get_srcdest(regionpath)
+        src, dest = get_srcdest(frameid, regiondir, objcatdir, gaiacatdir)
 
         # inverse transform needed; so swap src, dest as below
         xform = sk.transform.estimate_transform('polynomial', dest, src, order=3)
 
-        img_new = sk.transform.warp(img, xform, cval=bkg.globalback, output_shape=(4273, 2272))
+        # cval=bkg.globalback
+        cval = np.nan
+        img_new = sk.transform.warp(img, xform, cval=cval, output_shape=(4273, 2272))
 
         hdr['NAXIS2'] = 4273
         hdr['NAXIS1'] = 2272

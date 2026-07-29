@@ -89,7 +89,7 @@ def calc_distance(cat, obj_xy, cat_xy):
     dist = np.sqrt(xdisp**2 + ydisp**2)
     return dist
 
-def find_best(obj_xy, cat, cat_xy, cat_label):
+def find_best(obj_xy, cat, cat_xy):
     """
     returns value from catalog for catalog entry closest
     to obj_xy.
@@ -98,14 +98,13 @@ def find_best(obj_xy, cat, cat_xy, cat_label):
         cat: table of catalog entries
         cat_xy: tuple ('cat_x', 'cat_y') columns in cat for xy coords
             of catalog entry
-        cat_label: which field of catalog entry to be returned
     """
     dist = calc_distance(cat, obj_xy, cat_xy)
 
     mindist = dist.min()
     mindist_i = np.argmin(dist)
 
-    best_cat = cat[mindist_i][cat_label]
+    best_cat = cat[mindist_i][cat_xy]
 
     return (mindist, best_cat)
 
@@ -148,3 +147,19 @@ def coord_map(matchtbl, src_xy, dest_xy):
 def rmse(resid):
     RMSE = np.sqrt((resid**2).mean())
     return RMSE
+
+def snap_to_catalog(obj_xy, cat, cat_xy):
+    """
+    snaps the object coordinates to the nearest catalog entry
+    Arguments:
+        obj_xy: array of shape (N,2) of object coordinates
+        cat: astropy table of catalog entries
+        cat_xy: tuple of strings, which cols in cat to use for x,y coords
+    Returns:
+        snapped_xy: array of shape (N,2) of snapped coordinates
+    """
+    snapped_xy = np.zeros_like(obj_xy)
+    for i, xy in enumerate(obj_xy):
+        mindist, best_cat = find_best(xy, cat, cat_xy)
+        snapped_xy[i] = [best_cat[cat_xy[0]], best_cat[cat_xy[1]]]
+    return snapped_xy
