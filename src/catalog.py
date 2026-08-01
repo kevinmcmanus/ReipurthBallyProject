@@ -12,6 +12,11 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - executed in lightweight environments
     Table = None
 
+import warnings
+from astropy.io import fits
+from astropy.wcs import WCS
+from astropy.coordinates import SkyCoord
+from astropy import units as u  
 
 def match_to_regvec(match_tbl, src_xy, dest_xy,
                     reg_path, color='red',troot='m',
@@ -162,11 +167,40 @@ def rmse(resid):
     RMSE = np.sqrt((resid**2).mean())
     return RMSE
 
+def update_gaia_xy(config, frameid, gaiacat):
+    #get the wcs for the frame
 
-def get_srcdest(frameid, regiondir, objcatdir, gaiacatdir):
+    framepath = os.path.join(config['regdir'], frameid+'.fits')
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        with fits.open(framepath) as hdul:
+            wcs = WCS(hdul[0].header)
+
+    coords_gaia = SkyCoord(ra=gaiacat['ra'], dec=gaiacat['dec'], unit=u.deg, frame='fk5')
+
+    #add pixel position for each coord (0-relative, ie. python/numpy style)
+
+    #coordinates as reported by gaia
+    x,y = wcs.world_to_pixel_values(coords_gaia.ra, coords_gaia.dec)
+    gaiacat['x_gaia'] = x
+    gaiacat['y_gaia'] = y
+
+    # moved to the observation date
+    coords_obsdate = SkyCoord(ra=gaiacat['ra_obsdate'], dec=gaiacat['dec_obsdate'], unit=u.deg, frame='fk5')
+    x,y = wcs.world_to_pixel_values(coords_obsdate.ra, coords_obsdate.dec)
+    gaiacat['x_obsdate'] = x
+    gaiacat['y_obsdate'] = y
+
+    return gaiacat
+
+def get_srcdest(config, frameid):
     """
     Reads a ds9 region file of vectors and returns their endpoints.
     """
+    regiondir = config['regiondir']
+    objcatdir = config['objcatdir']
+    gaiacatdir = config['gaiacatdir']
+
     if np is None or Table is None:
         raise ModuleNotFoundError("numpy and astropy are required for get_srcdest")
     regions = []
@@ -192,6 +226,11 @@ def get_srcdest(frameid, regiondir, objcatdir, gaiacatdir):
     objcat = load_catalog(os.path.join(objcatdir, frameid + '.xml'))
     gaiacat = load_catalog(os.path.join(gaiacatdir, frameid + '.xml'))
 
+    #update the gaia catalog with pixel positions for the current frame WCS.
+    gaiacat = update_gaia_xy(config, frameid, gaiacat)
+
+
+    #snap the src and dest coordinates to the nearest catalog entries
     src_xy = snap_to_catalog(src_xy, objcat, ('x', 'y'))
     dest_xy = snap_to_catalog(dest_xy, gaiacat, ('x_obsdate', 'y_obsdate'))
 

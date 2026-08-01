@@ -21,15 +21,8 @@ except ModuleNotFoundError:  # pragma: no cover - executed in lightweight enviro
     sk = None
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-try:
-    from catalog import get_srcdest, rmse
-except ModuleNotFoundError:  # pragma: no cover - executed in lightweight environments
-    get_srcdest = None
 
-    def rmse(values):
-        if not values:
-            return float("nan")
-        return (sum(value * value for value in values) / len(values)) ** 0.5
+from catalog import get_srcdest, rmse
 
 from chan_info import get_fits
 
@@ -77,7 +70,7 @@ def compute_rmse_for_directory(regiondir, pattern=None, recursive=False,
             residuals = _residuals_from_srcdest(src_xy, dest_xy)
             if len(residuals) == 0:
                 continue
-            results.append({'Exp-ID': exp_id, 'Detector': detector+'-'+det_id, 'RMSE': rmse(residuals)})
+            results.append({'Exp-ID': exp_id, 'Detector': det_id+'-'+detector, 'RMSE': rmse(residuals)})
 
     return results
 
@@ -85,11 +78,6 @@ def get_frame_info(frameid, caldir):
     frame_path = os.path.join(caldir, frameid + '.fits')
     hdr, _ = get_fits(frame_path)
     return hdr['EXP-ID'], hdr['DETECTOR'], hdr['DET-ID']
-
-def _extract_numeric_values(path):
-    text = path.read_text(encoding="utf-8", errors="ignore")
-    values = re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", text)
-    return [float(value) for value in values]
 
 
 def _residuals_from_srcdest(src_xy, dest_xy):
@@ -134,5 +122,5 @@ if __name__ == "__main__":
     result_df = pd.DataFrame(results)
     pvt = result_df.pivot(index='Detector', columns='Exp-ID', values='RMSE')
     
-    with pd.option_context('display.float_format', '{:.3f}'.format):
+    with pd.option_context('display.float_format', '{:.6f}'.format):
         print(pvt)
