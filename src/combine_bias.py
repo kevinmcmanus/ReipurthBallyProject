@@ -2,6 +2,8 @@ import os, sys, shutil
 import argparse
 import numpy as np
 
+import yaml
+
 from ccdproc import ImageFileCollection
 from astropy.stats import mad_std
 import ccdproc as ccdp
@@ -24,10 +26,17 @@ def new_header(data_typ, old_hdr, constituent_list):
     new_hdr = fits.Header()
     if data_typ == 'BIAS':
         new_hdr.append(('DATA-TYP','COMBIAS','Combined Bias'))
+        new_hdr.append(('EXP-ID','COMBIAS', 'Combined Bias'))
+                        
     elif data_typ == 'DARK':
         new_hdr.append(('DATA-TYP','COMDARK', 'Combined Dark'))
+        new_hdr.append(('EXP-ID','COMDARK', 'Combined Dark'))
+
     else:
         raise ValueError(f'Invalid exposure type: {data_typ}')
+    
+    new_hdr.append(('DETECTOR', old_hdr['DETECTOR'], old_hdr.comments['DETECTOR']))
+    new_hdr.append(('DET-ID', old_hdr['DET-ID'], old_hdr.comments['DET-ID']))
 
     nt = Time.now()
     nt.format='iso'
@@ -81,18 +90,29 @@ def mk_mask(img, hdr, maskthresh=10.0):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='combines bias or dark files')
-    parser.add_argument('fitsdir', help='directory containing BIAS or DARK fits file')
-    parser.add_argument('destdir',help='directory where to put the combined files')
-    parser.add_argument('--exptype',help='source directory', default='BIAS')
+    parser = argparse.ArgumentParser(description='combines bias or dark frames into a single frame, writes out constituent file list')
+    parser.add_argument('--config_file', help='Subaru Reduction Configuration YAML')
+    parser.add_argument('--fitsdir', help='directory of frame fits files to be combined')
+    parser.add_argument('--destdir', help='directory to write combined fits files')
+    parser.add_argument('--data-typ', choices=['BIAS', 'DARK'], default='BIAS', help='type of exposure to combine (BIAS or DARK)')
+    
+
+    args = parser.parse_args()
+    with open(args.config_file,'r') as f:
+        config = yaml.safe_load(f)
+
 
     args = parser.parse_args()
 
-    fitsdir = args.fitsdir
-    destdir = args.destdir
-    data_typ = args.exptype
+    fitsdir = args.fitsdir if args.fitsdir is not None else config['SubaruReduction']['biasfitsdir']
+    destdir = args.destdir if args.destdir is not None else config['SubaruReduction']['biasdir']
+    data_typ = args.data_typ
 
-    
+    #fix up output directory
+    if os.path.exists(destdir):
+        shutil.rmtree(destdir)
+    os.mkdir(destdir)
+
     cols = ['MJD', 'OBJECT', 'DATA-TYP','DETECTOR','EXPTIME', 'GAIN']
     im_collection = ImageFileCollection(fitsdir, keywords = cols)
     #just to be careful...
@@ -121,7 +141,7 @@ if __name__ == '__main__':
                     method='median',
                     sigma_clip=True, sigma_clip_low_thresh=5, sigma_clip_high_thresh=5,
                     sigma_clip_func=np.ma.median, sigma_clip_dev_func=mad_std,
-                    mem_limit=8e9
+                    mem_limit=24e9
                     )
             
             # update the header and write the fits

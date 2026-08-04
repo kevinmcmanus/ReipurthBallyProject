@@ -198,8 +198,8 @@ def get_srcdest(config, frameid):
     Reads a ds9 region file of vectors and returns their endpoints.
     """
     regiondir = config['regiondir']
-    objcatdir = config['objcatdir']
-    gaiacatdir = config['gaiacatdir']
+    # objcatdir = config['objcatdir']
+    # gaiacatdir = config['gaiacatdir']
 
     if np is None or Table is None:
         raise ModuleNotFoundError("numpy and astropy are required for get_srcdest")
@@ -223,16 +223,16 @@ def get_srcdest(config, frameid):
     src_xy = np.array([reg_table['x'], reg_table['y']]).T
     dest_xy = np.array([reg_table['x_prime'], reg_table['y_prime']]).T
 
-    objcat = load_catalog(os.path.join(objcatdir, frameid + '.xml'))
-    gaiacat = load_catalog(os.path.join(gaiacatdir, frameid + '.xml'))
+    # objcat = load_catalog(os.path.join(objcatdir, frameid + '.xml'))
+    # gaiacat = load_catalog(os.path.join(gaiacatdir, frameid + '.xml'))
 
-    #update the gaia catalog with pixel positions for the current frame WCS.
-    gaiacat = update_gaia_xy(config, frameid, gaiacat)
+    # #update the gaia catalog with pixel positions for the current frame WCS.
+    # gaiacat = update_gaia_xy(config, frameid, gaiacat)
 
 
-    #snap the src and dest coordinates to the nearest catalog entries
-    src_xy = snap_to_catalog(src_xy, objcat, ('x', 'y'))
-    dest_xy = snap_to_catalog(dest_xy, gaiacat, ('x_obsdate', 'y_obsdate'))
+    # #snap the src and dest coordinates to the nearest catalog entries
+    # src_xy = snap_to_catalog(src_xy, objcat, ('x', 'y'))
+    # dest_xy = snap_to_catalog(dest_xy, gaiacat, ('x_obsdate', 'y_obsdate'))
 
     return src_xy, dest_xy
 

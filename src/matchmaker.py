@@ -174,29 +174,7 @@ def find_best_gaia(frameid, obj, obj_cat, gaia_cat, gaia_rad=200):
 
     return gaiaid
 
-def update_gaia_xy(config, frameid, gaiacat):
-    #get the wcs for the frame
-    regdir = config['regdir']
-    framepath = os.path.join(regdir, frameid+'.fits')
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        with fits.open(framepath) as hdul:
-            wcs = WCS(hdul[0].header)
 
-    coords_gaia = SkyCoord(ra=gaiacat['ra'], dec=gaiacat['dec'], unit=u.deg, frame='fk5')
-
-    #add pixel position for each coord (0-relative, ie. python/numpy style)
-
-    #coordinates as reported by gaia
-    x,y = wcs.world_to_pixel_values(coords_gaia.ra, coords_gaia.dec)
-    gaiacat['x_gaia'] = x
-    gaiacat['y_gaia'] = y
-
-    # moved to the observation date
-    coords_obsdate = SkyCoord(ra=gaiacat['ra_obsdate'], dec=gaiacat['dec_obsdate'], unit=u.deg, frame='fk5')
-    x,y = wcs.world_to_pixel_values(coords_obsdate.ra, coords_obsdate.dec)
-    gaiacat['x_obsdate'] = x
-    gaiacat['y_obsdate'] = y
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='pairs image objects with Gaia objects')

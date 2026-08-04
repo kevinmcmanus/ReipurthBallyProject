@@ -60,7 +60,7 @@ if __name__ == '__main__':
                             interval=PercentileInterval(99.5),
                             stretch=LogStretch(1000))
 
-    print(norm)
+    # print(norm)
 
     img_height = img.shape[0]
     framewidth = frameshape[1]
@@ -77,6 +77,9 @@ if __name__ == '__main__':
                 transform=ax.transAxes,
                 s=detector+bot_row_detectors[detector],
                 ha='center', va='bottom', color='red')
+        if i !=0:
+            ax.axvline(i*framewidth, color='red', ls='--', lw=1)
+    ax.axhline(img_height//2, color='red', ls='--', lw=1)
     ax.set_xticks([])
     ax.set_yticks([])
 

@@ -26,8 +26,7 @@ from catalog import get_srcdest, rmse
 
 from chan_info import get_fits
 
-def compute_rmse_for_directory(regiondir, pattern=None, recursive=False,
-                               caldir=None, objcatdir=None, gaiacatdir=None):
+def compute_rmse_for_directory(config):
     """Compute RMSE for each DS(9) region file in the specified directory.
     If objcatdir and gaiacatdir are provided, the function will snap the source
     and destination coordinates to the nearest catalog entries before computing the RMSE.
@@ -38,39 +37,31 @@ def compute_rmse_for_directory(regiondir, pattern=None, recursive=False,
     fit is estimated using a polynomial transformation of order 3.
 
     """
-    regiondir = Path(regiondir)
+    regiondir = Path(config['regiondir'])
+    caldir = Path(config['regdir'])
+
     if not regiondir.exists():
         raise FileNotFoundError(f"Directory does not exist: {regiondir}")
     if not regiondir.is_dir():
         raise NotADirectoryError(f"Not a directory: {regiondir}")
 
-    if recursive:
-        paths = regiondir.rglob(pattern or "*")
-    else:
-        paths = regiondir.iterdir()
 
     results = []
-    for path in sorted(paths):
-        if not path.is_file():
-            continue
-        if pattern is not None and not path.match(pattern):
+    for path in os.listdir(regiondir):
+
+        if not path.endswith('.reg'):
             continue
 
-        if regiondir is not None and objcatdir is not None and gaiacatdir is not None:
-            if get_srcdest is None or rmse is None:
-                raise ModuleNotFoundError("get_srcdest and rmse require numpy and astropy")
-            frameid = path.stem
-            exp_id, detector, det_id = get_frame_info(frameid, caldir)
-            det_id = str(det_id)
+        frameid = path[:-4]  # Remove the '.reg' extension
 
-            try:
-                src_xy, dest_xy = get_srcdest(frameid, str(regiondir), objcatdir, gaiacatdir)
-            except (FileNotFoundError, OSError, ValueError):
-                continue
-            residuals = _residuals_from_srcdest(src_xy, dest_xy)
-            if len(residuals) == 0:
-                continue
-            results.append({'Exp-ID': exp_id, 'Detector': det_id+'-'+detector, 'RMSE': rmse(residuals)})
+        exp_id, detector, det_id = get_frame_info(frameid, caldir)
+        det_id = str(det_id)
+
+        src_xy, dest_xy = get_srcdest(config, frameid)
+
+        residuals = _residuals_from_srcdest(src_xy, dest_xy)
+
+        results.append({'Exp-ID': exp_id, 'Detector': det_id+'-'+detector, 'RMSE': rmse(residuals)})
 
     return results
 
@@ -93,32 +84,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute RMSE for numeric values in files in a directory")
     # parser.add_argument("directory", help="Directory containing files to analyze")
     parser.add_argument("--config_file", help="Calibration Configuration YAML")
-    parser.add_argument("--pattern", default=None, help="Optional glob pattern to filter files")
-    parser.add_argument("--recursive", action="store_true", help="Search recursively")
+
+
     args = parser.parse_args()
 
-    if args.config_file is not None:
-        if yaml is None:
-            raise ModuleNotFoundError("PyYAML is required to read --config_file")
-        with open(args.config_file, 'r') as f:
-            config = yaml.safe_load(f)['SubaruReduction']
-        caldir = config['caldir']
-        regiondir = config['regiondir']
-        objcatdir = config['objcatdir']
-        gaiacatdir = config['gaiacatdir']
-    else:
-        regiondir = None
-        objcatdir = None
-        gaiacatdir = None
+    with open(args.config_file, 'r') as f:
+        config = yaml.safe_load(f)['SubaruReduction']
 
-    results = compute_rmse_for_directory(
-        regiondir,
-        pattern=args.pattern,
-        recursive=args.recursive,
-        caldir=caldir,
-        objcatdir=objcatdir,
-        gaiacatdir=gaiacatdir,
-    )
+    results = compute_rmse_for_directory(config)
+
     result_df = pd.DataFrame(results)
     pvt = result_df.pivot(index='Detector', columns='Exp-ID', values='RMSE')
     
