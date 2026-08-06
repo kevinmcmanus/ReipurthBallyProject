@@ -49,10 +49,11 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args":["/home/kevin/Documents/Pelican/all_fits",
-                    "N-A-L671",
-                    "/home/kevin/Documents/Pelican/N-A-L671/domeflat",
-                    //"--biasdir", "/home/kevin/Documents/Pelican/combined_bias"
+            "args": [
+                "--srcdir", "/Users/kevinmcmanus/Observations/Pelican/calibration_frames",
+                "--destdir", "/Users/kevinmcmanus/Observations/Pelican/N-A-L671/domeflats",
+                "--biasdir", "/Users/kevinmcmanus/Observations/BiasFrames/MasterBias",
+                "--filter", "N-A-L671"
             ]
 
         },

@@ -33,7 +33,7 @@ logging.basicConfig(
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 
-import chan_info as ci
+import channel as ci
 
 def get_fits(fitspath):
     with warnings.catch_warnings():
@@ -148,12 +148,13 @@ if __name__ == '__main__':
         # 2) subtract bias from science and dark images, so they are both at the same base level
         frame_data -= bias_data
         #scale the darks to the frame's exposure time
-        dark_data = scale_dark(dark_hdr, dark_data, bias_data, frame_hdr['EXPTIME'])
+        # dark_data = scale_dark(dark_hdr, dark_data, bias_data, frame_hdr['EXPTIME'])
 
         # subtract scaled darks from science frames
-        frame_data -= dark_data
+        # disabled to eliminate double counting of bias, since darks are already bias subtracted
+        # frame_data -= dark_data
 
-        #get rid of the overscan regions and adjust gain
+        #get rid of the overscan regions
         new_hdr, new_data = ci.rm_oscan(frame_hdr, frame_data)
 
         #flatten if necessary

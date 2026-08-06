@@ -57,16 +57,16 @@ def rm_oscan(hdr, data, data_typ = 'NO-OSCAN'):
         """
 
         ci_list = chan_info_list(hdr)
-        exptime = hdr['EXPTIME'] # in seconds
+        # exptime = hdr['EXPTIME'] # in seconds
 
         #convert to float32 here; convert to electrons; normalize to flux
         new_data = np.hstack(
-            [data[ci.eff_rows, ci.eff_cols].astype(np.float32)*ci.gain/exptime for ci in ci_list.channels()]
+            [data[ci.eff_rows, ci.eff_cols].astype(np.float32) for ci in ci_list.channels()]
             )
         new_hdr = hdr.copy()
         new_hdr['NAXIS2'], new_hdr['NAXIS1'] = new_data.shape
         new_hdr['DATA-TYP'] = data_typ
-        new_hdr['BUNIT'] = 'electron / s'
+        new_hdr['BUNIT'] = hdr['BUNIT']
         new_hdr.pop('BLANK', None)
 
         #adjust the ref pixels here?

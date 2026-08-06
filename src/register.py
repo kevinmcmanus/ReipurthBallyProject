@@ -11,7 +11,7 @@ import re, argparse, yaml
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src/r_d_src'))
 import registrar as rg
-import chan_info as ci
+import channel as ci
 
 
 if __name__ == '__main__':

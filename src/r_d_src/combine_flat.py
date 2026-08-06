@@ -13,7 +13,7 @@ import warnings
 import tempfile
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-import chan_info as ci
+import channel as ci
 
 # subtract off the detector-specific bias from each frame.
 # normalize each frame to counts per second.

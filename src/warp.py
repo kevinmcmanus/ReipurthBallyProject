@@ -20,7 +20,7 @@ import tempfile
 from sklearn.neighbors import LocalOutlierFactor
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-import chan_info as ci
+import channel as ci
 from catalog import *
 
 from matchscore import _residuals_from_srcdest

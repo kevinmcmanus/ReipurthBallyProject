@@ -24,7 +24,7 @@ sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 
 from catalog import get_srcdest, rmse
 
-from chan_info import get_fits
+from channel import get_fits
 
 def compute_rmse_for_directory(config):
     """Compute RMSE for each DS(9) region file in the specified directory.
