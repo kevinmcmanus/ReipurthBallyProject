@@ -13,7 +13,7 @@ import skimage as sk
 from time import perf_counter
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-import chan_info as ci
+import channel as ci
 from catalog import *
 
 def image_size(sz_str):

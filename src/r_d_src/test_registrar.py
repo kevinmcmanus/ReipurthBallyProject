@@ -9,7 +9,7 @@ import re
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src/r_d_src'))
 import registrar as rg
-import chan_info as ci
+import channel as ci
 
 #REGISTRATION INFO:
 # column prefix 'gaia' indicate the fk5 coords of reference object is in the reference frame

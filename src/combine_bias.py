@@ -65,7 +65,7 @@ def new_header(data_typ, old_hdr, constituent_list):
 
     return new_hdr
 
-import chan_info as ci
+import channel as ci
 def mk_mask(img, hdr, maskthresh=10.0):
 
     ci_list = ci.chan_info_list(hdr)

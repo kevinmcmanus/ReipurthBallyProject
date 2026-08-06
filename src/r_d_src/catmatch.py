@@ -17,7 +17,7 @@ import warnings
 import tempfile
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-import chan_info as ci
+import channel as ci
 
 from astropy.io.votable import parse_single_table
 def load_catalog(cat_path):

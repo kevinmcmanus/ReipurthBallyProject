@@ -21,7 +21,7 @@ from gaiastars import gaiastars as gs
 
 #from gaia_ps1 import gaia_xmatch_panstars
 
-import chan_info as ci
+import channel as ci
 
 def conesearch_params(wcs):
 
