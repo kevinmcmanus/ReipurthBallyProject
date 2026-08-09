@@ -11,52 +11,17 @@ import ccdproc as ccdp
 from astropy.io import fits
 from astropy.wcs import WCS
 
-import sep
+
 
 import warnings
 import tempfile
 
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-import channel as ci
+
+from suprimecam import channel as ci
+from suprimecam.catalog import find_stars
 
 
-def find_stars(frameid, hdr, data,  mask, regout=None, thresh = 50,
-               byteswap=False):
 
-    img_data = data.byteswap().newbyteorder() if byteswap else data
-    img_bkg = sep.Background(img_data, mask=mask)
-    bkg_img =img_bkg.back()
-    img_sub = img_data - bkg_img
-    objects = sep.extract(img_sub, thresh, mask=mask, err=bkg_img)# err=img_bkg.globalrms)
-
-    objects_tbl = Table(objects, meta={'ExtractionThreshold': thresh, 'err': img_bkg.globalrms})
-
-    if regout is not None:
-
-        ds9tbl = Table(objects)
-        # get the ra and dec for each object from its pixel coords
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            wcs = WCS(hdr)
-        ra,dec = wcs.pixel_to_world_values(ds9tbl['x'], ds9tbl['y'])
-        ds9tbl['ra'] = ra
-        ds9tbl['dec'] = dec
-        ds9tbl['eccentricity'] = np.sqrt(ds9tbl['a']**2 - ds9tbl['b']**2)/ds9tbl['a']
-        ds9tbl['include'] = True
-        ds9tbl['force'] = False
-
-        # catalogs use python coords, not ds9, so following commented out
-        ds9tbl['fits_x'] = ds9tbl['x'] + 1
-        ds9tbl['fits_y'] = ds9tbl['y'] + 1
-
-        ds9tbl['frameid'] = frameid
-        ds9tbl['objid'] = [f'obj-{i:04d}' for i in range(len(ds9tbl))]
-
-        # get the columns in a more better order
-        cols = ['objid','ra','dec','include','force','x','y','fits_x','fits_y','npix','eccentricity', 'flux']
-        ds9tbl[cols].write(regout, table_id= 'objects',format = 'votable', overwrite=True)
-        
-    return objects_tbl
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='creates object catalogs for each image')

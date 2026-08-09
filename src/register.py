@@ -9,9 +9,8 @@ from astropy.io import fits
 
 import re, argparse, yaml
 
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src/r_d_src'))
-import suprimecam.registrar as rg
-import channel as ci
+from  suprimecam import registrar as rg, channel as ci
+from suprimecam.catalog import find_stars
 
 
 if __name__ == '__main__':

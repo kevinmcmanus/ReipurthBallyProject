@@ -71,15 +71,6 @@ def get_frame_info(frameid, caldir):
     return hdr['EXP-ID'], hdr['DETECTOR'], hdr['DET-ID']
 
 
-def _residuals_from_srcdest(src_xy, dest_xy):
-    if src_xy.shape != dest_xy.shape:
-        raise ValueError("src_xy and dest_xy must have the same shape")
-    if sk is None:
-        raise ModuleNotFoundError("skimage is required for transform residuals")
-    xform = sk.transform.estimate_transform('polynomial', src_xy, dest_xy, order=3)
-    return xform.residuals(src_xy, dest_xy)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute RMSE for numeric values in files in a directory")
     # parser.add_argument("directory", help="Directory containing files to analyze")

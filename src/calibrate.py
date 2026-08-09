@@ -31,17 +31,9 @@ logging.basicConfig(
     format="%(levelname)s: %(message)s"
 )
 
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 
-import channel as ci
+from suprimecam import channel as ci
 
-def get_fits(fitspath):
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        with fits.open(fitspath) as hdul:
-            hdr = hdul[0].header.copy()
-            data = hdul[0].data.astype(np.float32)
-    return hdr, data
 
 # columns to save out of the oldheader:
     # skip these columns: DATE-OBS,  TIMESYS
@@ -125,7 +117,7 @@ if __name__ == '__main__':
         bn = os.path.basename(fin)
         fout = os.path.join(caldir, bn)
 
-        frame_hdr, frame_data = get_fits(fin)
+        frame_hdr, frame_data = ci.get_fits(fin)
 
         detector = frame_hdr['DETECTOR']
         frameid =  frame_hdr['FRAMEID']
@@ -140,10 +132,10 @@ if __name__ == '__main__':
         else:
             flatpath = None
 
-        bias_hdr, bias_data = get_fits(biaspath)
-        dark_hdr, dark_data = get_fits(darkpath)
+        bias_hdr, bias_data = ci.get_fits(biaspath)
+        dark_hdr, dark_data = ci.get_fits(darkpath)
         if flatdir is not None:
-            flat_hdr, flat_data = get_fits(flatpath)
+            flat_hdr, flat_data = ci.get_fits(flatpath)
 
         # 2) subtract bias from science and dark images, so they are both at the same base level
         frame_data -= bias_data

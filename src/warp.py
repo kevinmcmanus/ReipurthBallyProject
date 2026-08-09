@@ -1,29 +1,23 @@
 import os, sys, shutil
 import argparse
-import numpy as np
+import numpy as np, pandas as pd
 
 import yaml
 
-from ccdproc import ImageFileCollection
 
-from astropy.table import Table, join
 
 import ccdproc as ccdp
-from astropy.io import fits, ascii
-import sep
+from astropy.io import fits
 
 import skimage as sk
 
 import warnings
 import tempfile
 
-from sklearn.neighbors import LocalOutlierFactor
+from suprimecam import channel as ci
+from suprimecam import catalog as cat
+from suprimecam.utils import rmse
 
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-import channel as ci
-from catalog import *
-
-from matchscore import _residuals_from_srcdest
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='warps image files')
@@ -54,26 +48,24 @@ if __name__ == '__main__':
     results = []
 
 
-    im_collection=ImageFileCollection(regdir)
+    im_collection=ccdp.ImageFileCollection(regdir)
     for calimage in im_collection.files:
         impath = os.path.join(regdir, calimage)
         hdr, img = ci.get_fits(impath)
         frameid = hdr['FRAMEID']
         expID = hdr['EXP-ID']
         detector = str(hdr['DET-ID']) + '-' + hdr['DETECTOR']
-        bkg = sep.Background(img)
 
-        src, dest = get_srcdest(config, frameid)
+        src, dest = cat.get_srcdest(config, frameid)
 
         #compute the rmse
-        residuals = _residuals_from_srcdest(src, dest)
+        residuals = cat.residuals_from_srcdest(src, dest)
         rmse_value = rmse(residuals)
         results.append({'Exp-ID': expID,'Detector': detector, 'RMSE': rmse_value})
 
         # inverse transform needed; so swap src, dest as below
         xform = sk.transform.estimate_transform('polynomial', dest, src, order=3)
 
-        # cval=bkg.globalback
         cval = np.nan
         img_new = sk.transform.warp(img, xform, cval=cval, output_shape=(4273, 2272))
 

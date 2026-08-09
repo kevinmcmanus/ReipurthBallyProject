@@ -15,12 +15,7 @@ import argparse
 
 from gaiastars import gaiastars as gs
 
-
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-
-#from gaia_ps1 import gaia_xmatch_panstars
-
-import channel as ci
+from suprimecam import channel as ci
 
 def conesearch_params(wcs):
 
@@ -47,11 +42,10 @@ def get_gaia_data(imgpath, xmatch_file):
     
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with fits.open(imgpath) as hdul:
-            hdr = hdul[0].header
-            wcs = WCS(hdr)
-            mjd = hdr['MJD']
-            frameid = hdr['FRAMEID']
+        hdr, data = ci.get_fits(imgpath)
+        wcs = WCS(hdr)
+        mjd = hdr['MJD']
+        frameid = hdr['FRAMEID']
 
     ra, dec, rad = conesearch_params(wcs)
     print(f'Conesearch params: ra: {ra}, dec: {dec}, radius: {rad}')
