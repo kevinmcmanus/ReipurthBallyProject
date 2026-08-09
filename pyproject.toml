@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "suprimecam"
+version = "0.1.0"
+description = "Processing pipeline for Subaru Suprime-Cam images"
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+    "numpy",
+    "pandas",
+    "astropy",
+    "photutils",
+    "astroquery",
+    "matplotlib",
+    "PyYAML",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

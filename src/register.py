@@ -10,7 +10,7 @@ from astropy.io import fits
 import re, argparse, yaml
 
 sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src/r_d_src'))
-import registrar as rg
+import suprimecam.registrar as rg
 import channel as ci
 
 
