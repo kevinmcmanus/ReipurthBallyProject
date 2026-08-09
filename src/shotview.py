@@ -14,15 +14,10 @@ from astropy.visualization import imshow_norm, MinMaxInterval, LogStretch,Percen
 
 import warnings
 
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
+# from suprimecam import channel as ci
+# from suprimecam import catalog as cat
 
 
-def get_frame(dir, detector):
-    path = os.path.join(dir, detector+'.fits')
-    with fits.open(path) as f:
-        data = f[0].data.copy()
-
-    return data
 import matplotlib.colors as colors
 from astropy.visualization import imshow_norm, MinMaxInterval, LogStretch,PercentileInterval, ImageNormalize
 
@@ -37,6 +32,7 @@ if __name__ == '__main__':
     
     fitsdir = args.fitsdir
     exp_id = args.exp_id
+    stretch = args.stretch
 
 
     frames = {}
@@ -58,7 +54,7 @@ if __name__ == '__main__':
 
     norm = ImageNormalize(img,
                             interval=PercentileInterval(99.5),
-                            stretch=LogStretch(1000))
+                            stretch=LogStretch(stretch))
 
     # print(norm)
 

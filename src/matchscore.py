@@ -3,28 +3,14 @@ import os
 import re
 import sys
 from pathlib import Path
-import pandas as pd
+import numpy as np, pandas as pd
 
-try:
-    import yaml
-except ModuleNotFoundError:  # pragma: no cover - executed in lightweight environments
-    yaml = None
+import yaml
 
-try:
-    import numpy as np
-except ModuleNotFoundError:  # pragma: no cover - executed in lightweight environments
-    np = None
+from suprimecam.catalog import residuals_from_srcdest, get_srcdest
+from suprimecam.channel import get_fits
+from suprimecam.utils import rmse
 
-try:
-    import skimage as sk
-except ModuleNotFoundError:  # pragma: no cover - executed in lightweight environments
-    sk = None
-
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-
-from catalog import get_srcdest, rmse
-
-from channel import get_fits
 
 def compute_rmse_for_directory(config):
     """Compute RMSE for each DS(9) region file in the specified directory.
@@ -59,7 +45,7 @@ def compute_rmse_for_directory(config):
 
         src_xy, dest_xy = get_srcdest(config, frameid)
 
-        residuals = _residuals_from_srcdest(src_xy, dest_xy)
+        residuals = residuals_from_srcdest(src_xy, dest_xy)
 
         results.append({'Exp-ID': exp_id, 'Detector': det_id+'-'+detector, 'RMSE': rmse(residuals)})
 

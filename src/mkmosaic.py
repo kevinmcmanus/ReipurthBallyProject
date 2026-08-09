@@ -15,12 +15,9 @@ from photutils.background import MedianBackground
 
 import warnings, yaml
 
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src/r_d_src'))
 
-import channel as ci
-
-from utils import  preserveold
+import suprimecam.channel as ci
+from suprimecam.utils import  preserveold
 
 
 import argparse, yaml
