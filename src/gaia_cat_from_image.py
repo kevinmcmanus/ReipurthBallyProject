@@ -13,11 +13,10 @@ import warnings, yaml
 
 import argparse
 
-
-
-sys.path.append(os.path.expanduser('~/repos/runawaysearch/src'))
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 from gaiastars import gaiastars as gs
+
+
+sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 
 #from gaia_ps1 import gaia_xmatch_panstars
 
