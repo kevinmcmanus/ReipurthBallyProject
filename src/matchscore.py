@@ -23,8 +23,8 @@ def compute_rmse_for_directory(config):
     fit is estimated using a polynomial transformation of order 3.
 
     """
-    regiondir = Path(config['regiondir'])
-    caldir = Path(config['regdir'])
+    regiondir = Path(config['regiondir']).expanduser()
+    caldir = Path(config['regdir']).expanduser()
 
     if not regiondir.exists():
         raise FileNotFoundError(f"Directory does not exist: {regiondir}")
@@ -59,8 +59,9 @@ def get_frame_info(frameid, caldir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute RMSE for numeric values in files in a directory")
-    # parser.add_argument("directory", help="Directory containing files to analyze")
-    parser.add_argument("--config_file", help="Calibration Configuration YAML")
+    parser.add_argument("--config_file",
+                        default="config.yaml",
+                        help="Calibration Configuration YAML")
 
 
     args = parser.parse_args()

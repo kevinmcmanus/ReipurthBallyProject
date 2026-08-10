@@ -26,19 +26,20 @@ from suprimecam.catalog import find_stars
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='creates object catalogs for each image')
 
-    parser.add_argument('--config_file', help='Calibration Configuration YAML')
+    parser.add_argument('--config_file', help='Calibration Configuration YAML', default='config.yaml')
     parser.add_argument('--image_dir', default=None,  help='directory of images')
 
 
     args = parser.parse_args()
     with open(args.config_file,'r') as f:
         config = yaml.safe_load(f)
-
     config = config['SubaruReduction']
-    #regdir = config.pop('regdir')
+
     regdir = args.image_dir if args.image_dir is not None else config.pop('regdir')
-    objcatdir = config.pop('objcatdir')
-    maskdir = config.pop('maskdir')
+    regdir = os.path.expanduser(regdir)
+    objcatdir = os.path.expanduser(config.pop('objcatdir'))
+    maskdir = os.path.expanduser(config.pop('maskdir'))
+    
     thresh = config.pop('thresh')
 
 

@@ -88,18 +88,21 @@ def scale_dark(dark_hdr, dark_data, bias_data, exptime):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='dark corrects image files')
 
-    parser.add_argument('--config_file', help='Calibration Configuration YAML')
+    parser.add_argument('--config_file', help='Calibration Configuration YAML',
+                        default='config.yaml')
 
     args = parser.parse_args()
     with open(args.config_file,'r') as f:
         config = yaml.safe_load(f)
 
     config = config['SubaruReduction']
-    srcdir = config.pop('fitsdir')
-    caldir = config.pop('caldir')
-    biasdir = config.pop('biasdir')
-    darkdir = config.pop('darkdir')
+    srcdir = os.path.expanduser(config.pop('fitsdir'))
+    caldir = os.path.expanduser(config.pop('caldir'))
+    biasdir = os.path.expanduser(config.pop('biasdir'))
+    darkdir = os.path.expanduser(config.pop('darkdir'))
     flatdir = config.pop('flatdir', None)
+    if flatdir is not None:
+        flatdir = os.path.expanduser(flatdir)
     filter = config.pop('filter')
 
     #fix up output directory

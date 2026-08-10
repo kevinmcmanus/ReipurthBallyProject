@@ -15,16 +15,19 @@ from suprimecam.catalog import find_stars
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='adjusts image wcs to known coordinates')
-    parser.add_argument('--config_file', help='Subaru Reduction Configuration YAML')
+    parser.add_argument('--config_file',
+                        help='Subaru Reduction Configuration YAML',
+                        default='config.yaml')
 
     args = parser.parse_args()
     with open(args.config_file,'r') as f:
         config = yaml.safe_load(f)
-
     config = config['SubaruReduction']
-    caldir = config.pop('caldir')
-    regdir = config.pop('regdir')
-    registry = config.pop('registry')
+
+    caldir = os.path.expanduser(config.pop('caldir'))
+    regdir = os.path.expanduser(config.pop('regdir'))
+    registry = os.path.expanduser(config.pop('registry'))   
+
     extraction_thresh = config.pop('thresh')
 
 

@@ -99,8 +99,12 @@ def get_gaia_data(imgpath, xmatch_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='creates Gaia catalog for each frame')
-    parser.add_argument('--config_file', help='name of this object')
-    parser.add_argument('--image_dir', default=None,  help='directory of images')
+    parser.add_argument('--config_file',
+                        help='name of this object',
+                        default='config.yaml')
+    parser.add_argument('--image_dir',
+                        default=None, 
+                        help='directory of images')
     parser.add_argument(
         "--resume",
         action="store_true",
@@ -115,7 +119,8 @@ if __name__ == "__main__":
     config = config['SubaruReduction']
     
     regdir = args.image_dir if args.image_dir is not None else config.pop('regdir')
-    gaiacatdir = config['gaiacatdir']
+    regdir = os.path.expanduser(regdir)
+    gaiacatdir = os.path.expanduser(config['gaiacatdir'])
     maxmag = config.pop('maxmag', 33) # gets 'em all by default
 
     #fix up output directory

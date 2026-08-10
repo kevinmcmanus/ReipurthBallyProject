@@ -44,9 +44,9 @@ def auto_pair(config, frameid, detector, params):
 
     t_start = perf_counter()
 
-    objcatdir = config['objcatdir']
-    gaiacatdir = config['gaiacatdir']
-    regiondir = config['regiondir']
+    objcatdir = os.path.expanduser(config['objcatdir'])
+    gaiacatdir = os.path.expanduser(config['gaiacatdir'])
+    regiondir = os.path.expanduser(config['regiondir']) 
 
     #get the frame's object and gaia catalogs
     gaia_cat = cat.load_catalog(os.path.join(gaiacatdir,frameid+'.xml'), index_col='gaiaid')
@@ -178,7 +178,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='pairs image objects with Gaia objects')
 
     
-    parser.add_argument('--config_file', help='AutoPair Configuration YAML')
+    parser.add_argument('--config_file', help='AutoPair Configuration YAML', default='config.yaml')
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--o',help='result output file', default='ap-out.txt')
 
@@ -215,8 +215,8 @@ if __name__ == '__main__':
 
 
 
-    regdir = config['regdir']
-    regiondir = config['regiondir']
+    regdir = os.path.expanduser(config['regdir'])
+    regiondir = os.path.expanduser(config['regiondir'])
     resuming = args.resume
 
     if len(args.files) > 0:
@@ -228,10 +228,9 @@ if __name__ == '__main__':
         # fix up output directories
         if not resuming:
             resout = args.o
-            for dir in [ config['regiondir']]:
-                if os.path.exists(dir):
-                    shutil.rmtree(dir)
-                os.mkdir(dir)
+            if os.path.exists(regiondir):
+                shutil.rmtree(regiondir)
+            os.mkdir(regiondir)
         im_collection=ccdp.ImageFileCollection(regdir)
         files = im_collection.files
 

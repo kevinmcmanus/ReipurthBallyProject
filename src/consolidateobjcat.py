@@ -19,9 +19,9 @@ if __name__ == '__main__':
     parser.add_argument('outdir', type=str, help='Output directory for consolidated catalog')
     args = parser.parse_args()
 
-    objcatdir = args.objcatdir
-    image_dir = args.image_dir
-    outdir = args.outdir
+    objcatdir = os.path.expanduser(args.objcatdir)
+    image_dir = os.path.expanduser(args.image_dir)
+    outdir = os.path.expanduser(args.outdir)
 
     if not os.path.exists(outdir):
         os.makedirs(outdir)

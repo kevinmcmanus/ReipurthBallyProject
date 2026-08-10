@@ -109,7 +109,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='creates mosaic from list of files')
 
     parser.add_argument('--image_dir', default=None,  help='directory of images')
-    parser.add_argument('--config_file', default='config.yaml', help='yaml config file')
+    parser.add_argument('--config_file',
+                        default='config.yaml', help='yaml config file')
     parser.add_argument('--o',help='output mosaic file', default='mosaic.fits')
     parser.add_argument('--c',help='Comment')
     parser.add_argument('--bkcor', help='whether or not to do background correction', action='store_true')
@@ -122,7 +123,7 @@ if __name__ == '__main__':
     config = config['SubaruReduction']
     
     # Command line overrides YAML, use the warp directory out of the YAML
-    fits_dir = args.image_dir if args.image_dir is not None else config["warpdir"]
+    fits_dir = Path(args.image_dir if args.image_dir is not None else config['warpdir'])
     image_fits_dir = Path(fits_dir).expanduser().resolve(strict=True)
 
     print(f'Input file directory: {image_fits_dir}')
@@ -219,7 +220,8 @@ if __name__ == '__main__':
 
 
         phdu = fits.PrimaryHDU(data = img_data, header = img_hdr)
-        preserveold(args.o)
-        phdu.writeto(args.o, overwrite=True)
+        dest = Path(args.o).expanduser().resolve()
+        preserveold(dest)
+        phdu.writeto(dest, overwrite=True)
 
         

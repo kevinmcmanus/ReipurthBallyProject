@@ -22,18 +22,20 @@ from suprimecam.utils import rmse
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='warps image files')
 
-    parser.add_argument('--config_file', help='Calibration Configuration YAML')
+    parser.add_argument('--config_file',
+                        help='Calibration Configuration YAML',
+                        default='config.yaml')
 
     args = parser.parse_args()
     with open(args.config_file,'r') as f:
         config = yaml.safe_load(f)
 
     config = config['SubaruReduction']
-    regdir = config['regdir']
-    objcatdir = config['objcatdir']
-    gaiacatdir = config['gaiacatdir']
-    warpdir = config['warpdir']
-    regiondir = config['regiondir']
+    regdir = os.path.expanduser(config['regdir'])
+    objcatdir = os.path.expanduser(config['objcatdir'])
+    gaiacatdir = os.path.expanduser(config['gaiacatdir'])
+    warpdir = os.path.expanduser(config['warpdir'])
+    regiondir = os.path.expanduser(config['regiondir'])
 
     #fix up output directories
     for dir in [warpdir]:

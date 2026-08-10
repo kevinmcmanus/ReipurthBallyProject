@@ -167,7 +167,7 @@ def coord_map(matchtbl, src_xy, dest_xy):
 def update_gaia_xy(config, frameid, gaiacat):
     #get the wcs for the frame
 
-    framepath = os.path.join(config['regdir'], frameid+'.fits')
+    framepath = os.path.expanduser(os.path.join(config['regdir'], frameid+'.fits'))
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         with fits.open(framepath) as hdul:
@@ -194,7 +194,7 @@ def get_srcdest(config, frameid):
     """
     Reads a ds9 region file of vectors and returns their endpoints.
     """
-    regiondir = config['regiondir']
+    regiondir = os.path.expanduser(config['regiondir'])
     # objcatdir = config['objcatdir']
     # gaiacatdir = config['gaiacatdir']
 
