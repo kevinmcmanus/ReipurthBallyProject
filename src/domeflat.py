@@ -12,9 +12,8 @@ from astropy.io import fits
 import warnings
 import tempfile
 
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
 
-import channel as ci
+from suprimecam import channel as ci
 
 ########
 # Algorithm:
@@ -30,16 +29,16 @@ import channel as ci
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='creates dome flat frames')
     parser.add_argument('--srcdir', help='directory of image frames, eg. /home/Documents/Kevin/Pelican/all_fits')
+    parser.add_argument('--biasdir', help='directory of bias files, eg. /home/Documents/Kevin/Pelican/N-A-L671/bias')
     parser.add_argument('--filter', help='filter name, e.g. N-A-L671')
     parser.add_argument('--destdir', help='destination dir of domeflats files, eg. /home/Documents/Kevin/Pelican/N-A-L671/domeflat')
-    parser.add_argument('--biasdir', help='destination dir of bias files, eg. /home/Documents/Kevin/Pelican/N-A-L671/bias')
 
     args = parser.parse_args()
 
-    srcdir = args.srcdir
+    srcdir = os.path.expanduser(args.srcdir)
     filter = args.filter
-    final_destdir = args.destdir
-    biasdir = args.biasdir
+    final_destdir = os.path.expanduser(args.destdir)
+    biasdir = os.path.expanduser(args.biasdir)
 
 
     cols = ['MJD', 'OBJECT', 'DATA-TYP','DETECTOR','EXP1TIME', 'GAIN']

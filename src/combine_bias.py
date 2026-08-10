@@ -13,8 +13,6 @@ from astropy.stats import sigma_clip
 
 import warnings
 
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-
 
 def get_date_obs(fitspath):
     with fits.open(fitspath) as f:
@@ -51,7 +49,7 @@ def new_header(data_typ, old_hdr, constituent_list):
 
     new_hdr.append(('BUNIT', 'ADU'))
     new_hdr.append(('BSCALE', 1.0))
-    new_hdr.append(('BLANK', -32768))
+    #new_hdr.append(('BLANK', -32768))
 
     #new_hdr.append(('COMMENT', '----------------------------------------'), end=True)
     new_hdr.add_comment(('------ CCDproc.Combine Parameters ------'))
@@ -65,7 +63,7 @@ def new_header(data_typ, old_hdr, constituent_list):
 
     return new_hdr
 
-import channel as ci
+from suprimecam import channel as ci
 def mk_mask(img, hdr, maskthresh=10.0):
 
     ci_list = ci.chan_info_list(hdr)
@@ -81,6 +79,8 @@ def mk_mask(img, hdr, maskthresh=10.0):
     new_hdr = hdr.copy()
     new_hdr['NAXIS2'], new_hdr['NAXIS1'] = new_mask.shape
     new_hdr['DATA-TYP'] = 'MASK'
+    new_hdr['MASK-TH'] = maskthresh
+    new_hdr['EXP-ID'] = 'MASK'
 
     n_masked = new_mask.sum()
     print(f'Pixels masked: {n_masked}')
@@ -147,7 +147,7 @@ if __name__ == '__main__':
             # update the header and write the fits
             new_hdr = new_header(data_typ, combined_bias.header,
                                  list(detector_group['file']))
-            phdu = fits.PrimaryHDU(data = combined_bias.data.astype(np.uint16),
+            phdu = fits.PrimaryHDU(data = combined_bias.data.astype(np.float32),
                                     header=new_hdr)
             phdu.writeto(b_out, overwrite=True)
 

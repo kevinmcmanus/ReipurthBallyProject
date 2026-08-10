@@ -1,7 +1,7 @@
 
 import os, sys, shutil
 import argparse
-import numpy as np
+import numpy as np, pandas as pd
 
 import yaml
 import warnings, logging
@@ -17,9 +17,9 @@ import ccdproc as ccdp
 import skimage as sk
 from time import perf_counter
 
-sys.path.append(os.path.expanduser('~/repos/ReipurthBallyProject/src'))
-import channel as ci
-from catalog import *
+from suprimecam import channel as ci
+from suprimecam import catalog as cat
+from suprimecam.utils import rmse as ut_rmse
 
 # default parameters
 # (min_mag of 30 means use 'em all)
@@ -49,13 +49,11 @@ def auto_pair(config, frameid, detector, params):
     regiondir = config['regiondir']
 
     #get the frame's object and gaia catalogs
-    gaia_cat = load_catalog(os.path.join(gaiacatdir,frameid+'.xml'), index_col='gaiaid')
-    obj_cat = load_catalog(os.path.join(objcatdir,frameid+'.xml'), index_col=None)
+    gaia_cat = cat.load_catalog(os.path.join(gaiacatdir,frameid+'.xml'), index_col='gaiaid')
+    obj_cat = cat.load_catalog(os.path.join(objcatdir,frameid+'.xml'), index_col=None)
 
-    N_gaia = len(gaia_cat)
-    #print(f'N Objects: {len(obj_cat)}, N Gaia: {N_gaia}')
     #update the gaia catalogs x,y positions wrt frame's wcs
-    update_gaia_xy(config, frameid, gaia_cat)
+    cat.update_gaia_xy(config, frameid, gaia_cat)
 
     # clean up the object catalog
     criteria = np.array([
@@ -101,7 +99,7 @@ def auto_pair(config, frameid, detector, params):
         obj_fit = join(obj_fit, gaia_cat, keys='gaiaid')
 
     reg_path = os.path.join(regiondir, frameid+'.reg')
-    lengths = match_to_regvec(obj_fit,src_xy=('x','y'), dest_xy=('x_obsdate', 'y_obsdate'),
+    lengths = cat.match_to_regvec(obj_fit,src_xy=('x','y'), dest_xy=('x_obsdate', 'y_obsdate'),
                     reg_path = reg_path, color='cyan', troot=None)
     
     # warn about long vectors
@@ -117,10 +115,10 @@ def auto_pair(config, frameid, detector, params):
     
     # calc summary stats
     # transform every member of the object catalog
-    obj_xy, gaia_xy = coord_map(obj_fit, src_xy=('x','y'), dest_xy=('x_obsdate', 'y_obsdate'))
+    obj_xy, gaia_xy = cat.coord_map(obj_fit, src_xy=('x','y'), dest_xy=('x_obsdate', 'y_obsdate'))
     xform = sk.transform.estimate_transform('polynomial', obj_xy, gaia_xy, order=3)
     resids = xform.residuals(obj_xy, gaia_xy)
-    RMSE = rmse(resids)
+    RMSE = ut_rmse(resids)
 
     t_end = perf_counter()
     et = t_end-t_start
@@ -134,43 +132,43 @@ def find_best_gaia(frameid, obj, obj_cat, gaia_cat, gaia_rad=200):
     objid = obj['objid']
     obj_xy = np.array([obj['x'], obj['y']])
     # distance from obj to all other obj_cat members:
-    dists = calc_distance(obj_cat,obj_xy, ('x','y'))
+    dists = cat.calc_distance(obj_cat,obj_xy, ('x','y'))
 
     #find 5 nearest neighbors:
     dists_ai = dists.argsort()
-    neighbors, _ = coord_map(obj_cat[dists_ai[1:6]], ('x','y'), None)
+    neighbors, _ = cat.coord_map(obj_cat[dists_ai[1:6]], ('x','y'), None)
     #print(f'Neighbors shape: {neighbors.shape}')
     n_neighbors = neighbors.shape[0]
 
     #offsets to each of the gaia objs in the vicinity
-    dists = calc_distance(gaia_cat,obj_xy, ('x_obsdate','y_obsdate'))
+    dists = cat.calc_distance(gaia_cat,obj_xy, ('x_obsdate','y_obsdate'))
     near_gaia = np.logical_and(dists >0, dists <= gaia_rad)
-    gaia_xy, _ = coord_map(gaia_cat[near_gaia], ('x_obsdate','y_obsdate'), None)
+    gaia_xy, _ = cat.coord_map(gaia_cat[near_gaia], ('x_obsdate','y_obsdate'), None)
     n_gaia = gaia_xy.shape[0]
     offsets = gaia_xy - obj_xy
     #print(f'Offsets.shape: {offsets.shape}')
     assert offsets.shape == gaia_xy.shape # one offset for each gaia obj
 
     #for each neighbor, for each offset calc the distance to the nearest gaia object
-    dists = np.array([[find_mindist(n+o, gaia_cat, ('x_obsdate','y_obsdate'))\
+    dists = np.array([[cat.find_mindist(n+o, gaia_cat, ('x_obsdate','y_obsdate'))\
                       for o in offsets] for n in neighbors])
     #print(f'Neighbors: {n_neighbors}, Gaia: {n_gaia}, dist shape: {dists.shape}')
     if dists.shape != (n_neighbors, n_gaia):
         raise ValueError(f'Shapes not equal; dists.shape {dists.shape}, expected {(n_neighbors, n_gaia)}, objid: {objid}')
     
-    #rmse for each candidate gaia obj
-    rmse = np.sqrt((dists**2).mean(axis=0))
-    assert rmse.shape == (n_gaia, )
+    #RMSE for each candidate gaia obj
+    RMSE = np.sqrt((dists**2).mean(axis=0))
+    assert RMSE.shape == (n_gaia, )
 
-    # find the gaia obj with the least rmse
-    if len(rmse) == 0:
+    # find the gaia obj with the least RMSE
+    if len(RMSE) == 0:
         gaiaid = 'NoMatch'
         logger.warning('frameid: %s, object: %s, No match found', frameid, objid)
     else:
-        rmse_min_i = rmse.argmin()
-        gaiaid = gaia_cat[near_gaia][rmse_min_i]['gaiaid']
+        RMSE_min_i = RMSE.argmin()
+        gaiaid = gaia_cat[near_gaia][RMSE_min_i]['gaiaid']
 
-    #print(f'Min rmse: {rmse[rmse_min_i]}')
+    #print(f'Min RMSE: {RMSE[RMSE_min_i]}')
 
     return gaiaid
 
