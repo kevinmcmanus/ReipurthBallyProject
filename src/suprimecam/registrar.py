@@ -83,7 +83,7 @@ class registrar:
         # set the frame wcs and then find the target in it
         framePixActual += 1 #back to ds9/fits indexing
         w.wcs.crpix = framePixActual 
-        w.wcs.crval = np.array([reginfo.gaiaCRVAL1, reginfo.gaiaCRVAL2])
+        w.wcs.crval = np.array([reginfo.gaiaCRVAL1, reginfo.gaiaCRVAL2]).astype(np.float32)
 
         #find the target in the new wcs
         target_pix = w.world_to_pixel(self.targetCoord)

@@ -30,4 +30,5 @@ def rmse(resid):
     return RMSE
 
 
-    
+detectorIDs = {'chihiro':'6', 'clarisse':'7','fio':'2', 'kiki':'1', 'nausicaa':'0',
+            'ponyo':'8','san':'9', 'satsuki':'5', 'sheeta':'4', 'sophie':'3'}
